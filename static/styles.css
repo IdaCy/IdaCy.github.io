@@ -1,0 +1,112 @@
+/* General Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f9f9f9;
+}
+
+/* Header */
+header {
+    text-align: center;
+    background-color: #4CAF50;
+    color: white;
+    padding: 1rem 0;
+}
+
+header h1 {
+    font-size: 2.5rem;
+}
+
+/* Main Layout */
+main {
+    display: flex;
+    flex-direction: row;
+    gap: 1rem;
+    margin: 2rem;
+}
+
+/* Left Column */
+.left-column {
+    flex: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.profile-pic img {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    border: 3px solid #4CAF50;
+    object-fit: cover;
+}
+
+.facts-list {
+    list-style-type: disc;
+    padding: 0 1.5rem;
+    text-align: left;
+    font-size: 1rem;
+}
+
+.bike-drawing img {
+    width: 100%;
+    max-width: 250px;
+    opacity: 0.7;
+}
+
+/* Right Column */
+.right-column {
+    flex: 7;
+    background-color: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.right-column section {
+    margin-bottom: 1.5rem;
+}
+
+.right-column h2 {
+    font-size: 1.5rem;
+    color: #4CAF50;
+    margin-bottom: 0.5rem;
+}
+
+.right-column p,
+.right-column ul {
+    font-size: 1rem;
+}
+
+.right-column ul {
+    list-style: disc;
+    padding-left: 1.5rem;
+}
+
+.right-column a {
+    color: #4CAF50;
+    text-decoration: none;
+}
+
+.right-column a:hover {
+    text-decoration: underline;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    main {
+        flex-direction: column;
+    }
+    .left-column, .right-column {
+        flex: 1;
+    }
+}

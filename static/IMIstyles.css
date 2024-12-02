@@ -54,7 +54,7 @@ main {
 #about, #research {
     padding: 10px;
     border-right: 1px solid #ddd;
-    line-height: 1.4em;
+    line-height: 1.5em;
 }
 
 #about h2, #research h2 {
@@ -104,6 +104,10 @@ div#content {
     list-style-type: circle;
     padding-left: 20px;
     color: #555;
+}
+
+#team p {
+    margin: 2.4px;
 }
 
 #contact {
