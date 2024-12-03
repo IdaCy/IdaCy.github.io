@@ -10,6 +10,11 @@ body {
     line-height: 1.6;
     color: #333;
     background-color: #f9f9f9;
+    padding: 0;
+    margin: 0;
+    height: 100vh; /* Ensure body fills the entire viewport */
+    display: flex;
+    flex-direction: column;
 }
 
 /* Header */
@@ -18,6 +23,7 @@ header {
     background-color: #4CAF50;
     color: white;
     padding: 1rem 0;
+    flex-shrink: 0;
 }
 
 header h1 {
@@ -27,9 +33,11 @@ header h1 {
 /* Main Layout */
 main {
     display: flex;
+    flex-grow: 1; /* Ensures main takes the available space */
     flex-direction: row;
     gap: 1rem;
-    margin: 2rem;
+    height: calc(100vh - 4rem); /* Full height minus header */
+    overflow: hidden; /* Prevents scrolling for the entire layout */
 }
 
 /* Left Column */
@@ -38,7 +46,16 @@ main {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1rem;
+    justify-content: flex-start;
+    justify-content: space-between; /* Ensures elements spread evenly */
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+}
+
+.left-column ul {
+    list-style: none;
+    font-style: italic;
 }
 
 .profile-pic img {
@@ -47,19 +64,25 @@ main {
     border-radius: 50%;
     border: 3px solid #4CAF50;
     object-fit: cover;
+    margin: 0;
+    padding: 0;
+    margin-top: 20px;
 }
 
 .facts-list {
     list-style-type: disc;
-    padding: 0 1.5rem;
-    text-align: left;
     font-size: 1rem;
+    text-align: left;
+    padding: 0;
+    margin: 0;
 }
 
 .bike-drawing img {
-    width: 100%;
-    max-width: 250px;
-    opacity: 0.7;
+    width: auto;
+    max-height: 100px; /* Adjust size dynamically */
+    object-fit: contain;
+    margin: 0;
+    align-self: flex-end; /* Aligns the bike to the bottom */
 }
 
 /* Right Column */
@@ -70,6 +93,9 @@ main {
     border-radius: 5px;
     padding: 1.5rem;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    overflow-y: auto; /* Allows scrolling for the content */
+    height: calc(100vh - 4rem); /* Fills the remaining height */
+    margin: 20px;
 }
 
 .right-column section {
@@ -78,7 +104,7 @@ main {
 
 .right-column h2 {
     font-size: 1.5rem;
-    color: #4CAF50;
+    color: #115b14;
     margin-bottom: 0.5rem;
 }
 
@@ -93,7 +119,7 @@ main {
 }
 
 .right-column a {
-    color: #4CAF50;
+    color: #267428;
     text-decoration: none;
 }
 
@@ -101,12 +127,44 @@ main {
     text-decoration: underline;
 }
 
+.right-column p#extra {
+    margin-bottom: 10px;
+    font-style: italic;
+}
+
+/* Recommendations List */
+section.recommendations ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+section.recommendations ul li {
+    position: relative;
+    padding-left: 20px;
+    margin-bottom: 10px;
+}
+
+section.recommendations ul li::before {
+    content: "📌";
+    font-size: 0.55em;
+    position: absolute;
+    left: 5px;
+    top: 6px;
+    color: rgba(16, 15, 15, 0.806);
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     main {
         flex-direction: column;
     }
+
     .left-column, .right-column {
         flex: 1;
+    }
+
+    .bike-drawing img {
+        max-height: 80px; /* Resize bike for smaller screens */
     }
 }
