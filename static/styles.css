@@ -30,29 +30,6 @@ header h1 {
     font-size: 2.5rem;
 }
 
-/* Main Layout */
-main {
-    display: flex;
-    flex-grow: 1; /* Ensures main takes the available space */
-    flex-direction: row;
-    gap: 1rem;
-    height: calc(100vh - 4rem); /* Full height minus header */
-    overflow: hidden; /* Prevents scrolling for the entire layout */
-}
-
-/* Left Column */
-.left-column {
-    flex: 3;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    justify-content: space-between; /* Ensures elements spread evenly */
-    padding: 0;
-    margin: 0;
-    overflow: hidden;
-}
-
 .left-column ul {
     list-style: none;
     font-style: italic;
