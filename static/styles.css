@@ -1,7 +1,7 @@
 * {
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
+    /*box-sizing: border-box;*/
 }
 
 body {
@@ -14,6 +14,7 @@ body {
     flex-direction: column;
     padding: 0;
     margin: 0;
+    background-color: rgb(194, 228, 159);
 }
 
 main {
@@ -36,6 +37,7 @@ main {
     justify-content: space-between;
     padding: 0;
     margin: 0;
+    padding-top: 150px;
     overflow: hidden;
     width: 100%;
 }
@@ -51,11 +53,16 @@ main {
     width: 100%;
     margin: 0;
     padding: 0;
+    margin-top: 20px;
 }
 
 h1 {
     font-size: 2.5rem;
-    font-family: "Rubik Vinyl", serif;
+    /*font-family: "Rubik Vinyl", serif;
+    font-weight: 400;
+    font-style: normal;*/
+    
+    font-family: "Flavors", serif;
     font-weight: 400;
     font-style: normal;
 }
