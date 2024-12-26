@@ -102,7 +102,7 @@ main {
     padding: 1.5rem;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     overflow-y: auto; /* Allows scrolling for the content */
-    height: calc(100vh - 4rem); /* Fills the remaining height */
+    height: calc(100vh - 4rem) - 1em; /* Fills the remaining height */
     margin: 20px;
 }
 
