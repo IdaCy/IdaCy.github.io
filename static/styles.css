@@ -1,7 +1,10 @@
 * {
     margin: 0;
     padding: 0;
-    /*box-sizing: border-box;*/
+    /*box-sizing: border-box;
+    font-family: 'Roboto', sans-serif;*/
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.98em;
 }
 
 body {
@@ -66,13 +69,12 @@ a:hover {
 }
 
 h1 {
-    font-size: 2.5rem;
+    font-size: 2.2rem;
     /*font-family: "Rubik Vinyl", serif;
-    font-weight: 400;
-    font-style: normal;*/
+    font-family: "Flavors", serif;*/
     
-    font-family: "Flavors", serif;
-    font-weight: 400;
+    font-family: "Kranky", serif;
+    font-weight: 600;
     font-style: normal;
 }
 
@@ -132,7 +134,7 @@ h1 {
 
 .facts-list {
     list-style-type: disc;
-    font-size: 1rem;
+    /*font-size: 1rem;*/
     text-align: left;
     padding: 0;
     margin: 0;
@@ -168,7 +170,7 @@ h1 {
 }
 
 .right-column h2 {
-    font-size: 1rem;
+    /*font-size: 1rem;*/
     color: #115b13;
     margin-bottom: 0.2rem;
     font-style: normal;
@@ -176,7 +178,7 @@ h1 {
 
 .right-column p,
 .right-column ul {
-    font-size: 1rem;
+    /*font-size: 1rem;*/
 }
 
 .right-column ul {
