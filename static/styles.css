@@ -32,13 +32,24 @@ main {
 }
 
 a {
-    text-decoration: none;
-    color: rgb(9, 79, 32);
+    /*text-decoration: none;
+    font-weight: 600;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;*/
+    color: rgb(65, 93, 74);
+    text-decoration: underline;
+    text-decoration-color: rgba(101, 148, 114, 0.384);
+    text-decoration-thickness: 0.2px;
 }
 
 a:hover {
     text-decoration: underline;
 }
+
+/*span.high {
+    font-weight: 900;
+    color: rgb(9, 79, 32);
+}*/
 
 .left-column {
     flex: 3;
@@ -57,7 +68,7 @@ a:hover {
 .header {
     text-align: center;
     
-    color: rgb(9, 79, 32);
+    color: rgb(5, 72, 27);
     /*background-color: #4CAF50;
     padding: 1rem 0;*/
     flex-shrink: 0;
@@ -171,7 +182,7 @@ h1 {
 
 .right-column h2 {
     /*font-size: 1rem;*/
-    color: #115b13;
+    color: #064708;
     margin-bottom: 0.2rem;
     font-style: normal;
 }
