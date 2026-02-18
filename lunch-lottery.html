@@ -373,13 +373,13 @@
             <div class="lottery-header">
                 <h1>Lunch Lottery</h1>
                 <p class="subtitle">Constellation</p>
-                <p class="tagline">Sign up before the deadline and get paired with a random colleague for lunch!</p>
+                <p class="tagline">Sign up anytime for the next lottery! You'll be paired with a random colleague for lunch.</p>
                 <p class="contact-info">Questions? Contact Ida or Thomas.</p>
             </div>
 
             <div class="lottery-container">
                 <div class="deadline-info">
-                    <h3>Sign-up Deadline</h3>
+                    <h3>Next Lottery</h3>
                     <p id="deadline-text"></p>
                     <div class="countdown" id="countdown"></div>
                     <span class="status-badge" id="status-badge"></span>
@@ -558,29 +558,40 @@
             document.getElementById('lunch-tuesday').textContent = formatted;
         }
 
-        // Get next deadline - TEMPORARY: set to 2 minutes from page load for testing
+        // Get next deadline - TEMPORARY: 2 minutes from page load, advances after lottery
         let testDeadline = null;
         function getNextDeadline() {
+            const now = new Date();
             if (!testDeadline) {
                 testDeadline = new Date();
+                testDeadline.setMinutes(testDeadline.getMinutes() + 2);
+            }
+            // If deadline passed, advance to next cycle (2 more minutes for testing)
+            while (testDeadline < now) {
                 testDeadline.setMinutes(testDeadline.getMinutes() + 2);
             }
             return testDeadline;
         }
 
-        /* ORIGINAL - uncomment when done testing:
+        /* PRODUCTION - uncomment when done testing:
         function getNextDeadline() {
             const now = new Date();
             const dayOfWeek = now.getDay();
-            const daysUntilMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : 8 - dayOfWeek);
+
+            // Calculate next Monday 23:59
+            let daysUntilMonday;
+            if (dayOfWeek === 1) {
+                // It's Monday - if before 23:59, deadline is today; otherwise next Monday
+                daysUntilMonday = (now.getHours() >= 23 && now.getMinutes() >= 59) ? 7 : 0;
+            } else if (dayOfWeek === 0) {
+                daysUntilMonday = 1; // Sunday -> tomorrow
+            } else {
+                daysUntilMonday = 8 - dayOfWeek; // Tue-Sat -> next Monday
+            }
 
             const deadline = new Date(now);
             deadline.setDate(now.getDate() + daysUntilMonday);
             deadline.setHours(23, 59, 0, 0);
-
-            if (dayOfWeek === 1 && now.getHours() >= 23 && now.getMinutes() >= 59) {
-                deadline.setDate(deadline.getDate() + 7);
-            }
 
             return deadline;
         }
@@ -598,19 +609,14 @@
         }
 
         // Update countdown display
+        // With rotating system, signups are ALWAYS open - you're signing up for the NEXT lottery
         function updateCountdown() {
             const deadline = getNextDeadline();
             const now = new Date();
             const diff = deadline - now;
 
-            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-
             const countdownEl = document.getElementById('countdown');
             const statusBadge = document.getElementById('status-badge');
-            const signupForm = document.getElementById('signup-form');
             const deadlineText = document.getElementById('deadline-text');
 
             // Update deadline text with dynamic day and time
@@ -622,16 +628,19 @@
             });
             deadlineText.textContent = `${deadlineDay} at ${deadlineTime} PST`;
 
+            // Signups are always open with rotating system
+            statusBadge.textContent = 'Sign-up Open';
+            statusBadge.className = 'status-badge status-open';
+
             if (diff > 0) {
+                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((diff % (1000 * 60)) / 1000);
                 countdownEl.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
-                statusBadge.textContent = 'Sign-up Open';
-                statusBadge.className = 'status-badge status-open';
-                signupForm.style.display = 'flex';
             } else {
-                countdownEl.textContent = 'Deadline passed!';
-                statusBadge.textContent = 'Sign-up Closed';
-                statusBadge.className = 'status-badge status-closed';
-                signupForm.style.display = 'none';
+                // Deadline passed - lottery should run, then show countdown to NEXT deadline
+                countdownEl.textContent = 'Lottery running...';
             }
 
             // Update Tuesday date display
@@ -720,11 +729,10 @@
 
                     // Show confirmation
                     const confirmation = document.getElementById('signup-confirmation');
-                    confirmation.textContent = `Thanks ${name}! You're signed up for the lunch lottery.`;
+                    confirmation.textContent = `Thanks ${name}! You're signed up for the next lunch lottery.`;
                     confirmation.style.display = 'block';
 
-                    // Clear old pairings when new participant joins
-                    clearPairings();
+                    // Don't clear pairings - they're for THIS week, new signups are for NEXT week
                 } else {
                     alert(data.error || 'Failed to sign up. Please try again.');
                 }
@@ -794,16 +802,19 @@
             }
         }
 
-        // Load pairings from Google Sheets
+        // Load pairings from Google Sheets - always render (shows empty state if none)
         async function loadPairings() {
             try {
                 const response = await fetch(SHEETS_API_URL + '?action=getPairings');
                 const data = await response.json();
-                if (data.success && data.pairings && data.pairings.length > 0) {
-                    renderPairings(data.pairings);
+                if (data.success) {
+                    renderPairings(data.pairings || []);
+                } else {
+                    renderPairings([]);
                 }
             } catch (error) {
                 console.error('Failed to load pairings:', error);
+                renderPairings([]);
             }
         }
 
@@ -817,7 +828,13 @@
             const container = document.getElementById('pairings-container');
 
             if (!pairings || pairings.length === 0) {
-                container.innerHTML = '';
+                container.innerHTML = `
+                    <h3 style="color: rgb(5, 72, 27); margin-bottom: 15px;">This Week's Lunch Pairs</h3>
+                    <div class="pairing-card" style="background: linear-gradient(135deg, #fff3cd, #ffeeba); border-color: #ffc107;">
+                        <div class="lunch-emoji">🎲</div>
+                        <p style="color: #856404; font-style: italic;">First iteration - wait for Tuesday for the first lottery draw!</p>
+                    </div>
+                `;
                 return;
             }
 
