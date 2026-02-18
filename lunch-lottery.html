@@ -531,16 +531,15 @@
             }
 
             updateNextTuesday();
-            updateCountdown();
-            setInterval(updateCountdown, 1000);
 
-            // Load pairings (always shows current pairings from Google Sheets)
+            // Load pairings first (always shows current pairings from Google Sheets)
             await loadPairings();
 
-            // Auto-run lottery if conditions are met
-            if (await shouldAutoRunLottery()) {
-                await runLottery();
-            }
+            // Initial countdown update (may trigger lottery if deadline passed)
+            await updateCountdown();
+
+            // Update countdown every second
+            setInterval(updateCountdown, 1000);
         });
 
         // Get next Tuesday after the deadline
@@ -563,19 +562,25 @@
             document.getElementById('lunch-tuesday').textContent = formatted;
         }
 
-        // Get next deadline - TEMPORARY: 2 minutes from page load, advances after lottery
+        // Get next deadline - TEMPORARY: 2 minutes from page load
+        // Use separate variable for display vs lottery trigger
         let testDeadline = null;
+        let lotteryTriggered = false;
+
         function getNextDeadline() {
             const now = new Date();
             if (!testDeadline) {
                 testDeadline = new Date();
                 testDeadline.setMinutes(testDeadline.getMinutes() + 2);
             }
-            // If deadline passed, advance to next cycle (2 more minutes for testing)
-            while (testDeadline < now) {
-                testDeadline.setMinutes(testDeadline.getMinutes() + 2);
-            }
             return testDeadline;
+        }
+
+        // Advance deadline to next cycle (called after lottery runs)
+        function advanceDeadline() {
+            testDeadline = new Date();
+            testDeadline.setMinutes(testDeadline.getMinutes() + 2);
+            // Don't reset lotteryTriggered here - it resets on page reload
         }
 
         /* PRODUCTION - uncomment when done testing:
@@ -615,7 +620,7 @@
 
         // Update countdown display
         // With rotating system, signups are ALWAYS open - you're signing up for the NEXT lottery
-        function updateCountdown() {
+        async function updateCountdown() {
             const deadline = getNextDeadline();
             const now = new Date();
             const diff = deadline - now;
@@ -624,14 +629,15 @@
             const statusBadge = document.getElementById('status-badge');
             const deadlineText = document.getElementById('deadline-text');
 
-            // Update deadline text with dynamic day and time
+            // Update deadline text with dynamic day and time (show local timezone)
             const deadlineDay = deadline.toLocaleDateString('en-US', { weekday: 'long' });
             const deadlineTime = deadline.toLocaleTimeString('en-US', {
                 hour: '2-digit',
                 minute: '2-digit',
-                hour12: true
+                hour12: true,
+                timeZoneName: 'short'
             });
-            deadlineText.textContent = `${deadlineDay} at ${deadlineTime} PST`;
+            deadlineText.textContent = `${deadlineDay} at ${deadlineTime}`;
 
             // Signups are always open with rotating system
             statusBadge.textContent = 'Sign-up Open';
@@ -644,8 +650,21 @@
                 const seconds = Math.floor((diff % (1000 * 60)) / 1000);
                 countdownEl.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
             } else {
-                // Deadline passed - lottery should run, then show countdown to NEXT deadline
-                countdownEl.textContent = 'Lottery running...';
+                // Deadline passed - trigger lottery if not already triggered
+                if (!lotteryTriggered) {
+                    lotteryTriggered = true;
+                    countdownEl.textContent = 'Running lottery...';
+
+                    // Check if we can run lottery
+                    const participants = await getParticipants();
+                    if (participants.length >= 2) {
+                        await runLottery();
+                        // runLottery already renders pairings, don't reload
+                    }
+
+                    // Advance to next deadline (but keep lotteryTriggered true until next cycle)
+                    advanceDeadline();
+                }
             }
 
             // Update Tuesday date display
@@ -812,9 +831,11 @@
             try {
                 const response = await fetch(SHEETS_API_URL + '?action=getPairings');
                 const data = await response.json();
+                console.log('Pairings API response:', data); // Debug
                 if (data.success) {
                     renderPairings(data.pairings || []);
                 } else {
+                    console.error('Pairings API error:', data.error);
                     renderPairings([]);
                 }
             } catch (error) {
@@ -823,9 +844,9 @@
             }
         }
 
-        // Clear pairings display (actual clearing done via clearAll)
+        // Clear pairings display and show empty state
         function clearPairings() {
-            document.getElementById('pairings-container').innerHTML = '';
+            renderPairings([]);
         }
 
         // Render pairings

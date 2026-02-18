@@ -99,7 +99,7 @@ function doGet(e) {
     }
 
     const data = pairingsSheet.getDataRange().getValues();
-    if (data.length < 2) {
+    if (data.length < 3) { // Need header + date row + at least 1 person
       return ContentService
         .createTextOutput(JSON.stringify({ success: true, pairings: [], lotteryRun: null }))
         .setMimeType(ContentService.MimeType.JSON);
@@ -107,15 +107,19 @@ function doGet(e) {
 
     const lotteryRun = data[1] && data[1][0] ? data[1][0] : null;
 
+    // Check if we have PairGroup column (header row)
+    const hasPairGroup = data[0] && data[0][3] === 'PairGroup';
+
     const pairings = [];
     let currentPair = [];
+
     for (let i = 2; i < data.length; i++) {
       if (data[i][0]) {
         const person = {
           name: data[i][0],
           email: data[i][1],
           slack: data[i][2],
-          pairGroup: data[i][3]
+          pairGroup: hasPairGroup ? data[i][3] : Math.floor((i - 2) / 2) + 1
         };
 
         if (currentPair.length === 0 || currentPair[0].pairGroup === person.pairGroup) {
