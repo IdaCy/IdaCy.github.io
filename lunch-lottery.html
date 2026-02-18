@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lunch Lottery - Constellation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Flavors&family=Kranky&family=Rubik+Vinyl&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            background-color: rgb(251, 247, 217);
+            color: #333;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        h1 {
+            font-family: "Kranky", serif;
+            font-weight: 600;
+        }
+
+        a {
+            color: rgb(65, 93, 74);
+            text-decoration: underline;
+            text-decoration-color: rgba(86, 136, 100, 0.466);
+        }
+
+        .lottery-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .signup-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .form-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .signup-form input[type="text"],
+        .signup-form input[type="email"],
+        .signup-form input[type="date"] {
+            padding: 12px 15px;
+            border: 2px solid rgb(65, 93, 74);
+            border-radius: 8px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 1rem;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .signup-form input:focus {
+            outline: none;
+            border-color: rgb(5, 72, 27);
+        }
+
+        .lunch-date-display {
+            background: linear-gradient(135deg, rgb(65, 93, 74), rgb(5, 72, 27));
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .lunch-date-display .lunch-label {
+            font-weight: 400;
+            margin-right: 8px;
+        }
+
+        .lunch-date-display .lunch-date {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background-color: rgb(65, 93, 74);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: rgb(5, 72, 27);
+        }
+
+        .btn-lottery {
+            background-color: rgb(5, 72, 27);
+            color: white;
+            width: 100%;
+            padding: 15px;
+            font-size: 1.1rem;
+            margin-top: 20px;
+        }
+
+        .btn-lottery:hover {
+            background-color: rgb(65, 93, 74);
+        }
+
+        .btn-clear {
+            background-color: #dc3545;
+            color: white;
+            font-size: 0.9rem;
+            padding: 8px 16px;
+        }
+
+        .btn-clear:hover {
+            background-color: #c82333;
+        }
+
+        .participants-list {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .participants-list h3 {
+            color: rgb(5, 72, 27);
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .participant-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background: rgb(251, 247, 217);
+            border-radius: 5px;
+            margin-bottom: 8px;
+        }
+
+        .participant-item .remove-btn {
+            background: none;
+            border: none;
+            color: #dc3545;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0 5px;
+        }
+
+        .participant-item .remove-btn:hover {
+            color: #c82333;
+        }
+
+        .participant-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .participant-name {
+            font-weight: 600;
+            color: rgb(5, 72, 27);
+        }
+
+        .participant-slack {
+            font-size: 0.9rem;
+            color: rgb(65, 93, 74);
+        }
+
+        .participant-email {
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .slack-handles {
+            font-size: 0.95rem;
+            color: rgb(65, 93, 74);
+            margin-top: 5px;
+        }
+
+        .empty-state {
+            color: #666;
+            font-style: italic;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .deadline-info {
+            background: linear-gradient(135deg, rgb(65, 93, 74), rgb(5, 72, 27));
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .deadline-info h3 {
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+
+        .countdown {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .pairings-container {
+            margin-top: 30px;
+        }
+
+        .pairing-card {
+            background: linear-gradient(135deg, #fff, rgb(251, 247, 217));
+            border: 2px solid rgb(65, 93, 74);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            text-align: center;
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .pairing-card .lunch-emoji {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .pairing-card .names {
+            font-size: 1.3rem;
+            color: rgb(5, 72, 27);
+            font-weight: 600;
+        }
+
+        .pairing-card .heart {
+            color: #e74c3c;
+            margin: 0 10px;
+        }
+
+        .solo-card {
+            background: linear-gradient(135deg, #fff3cd, #ffeeba);
+            border-color: #ffc107;
+        }
+
+        .solo-card .names {
+            color: #856404;
+        }
+
+        .trio-card {
+            background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+            border-color: rgb(65, 93, 74);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+        }
+
+        .status-open {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .status-closed {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: rgb(65, 93, 74);
+        }
+
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        /* Full page layout */
+        .lottery-main {
+            display: block;
+            height: auto;
+            min-height: 100vh;
+            overflow: auto;
+            padding: 0;
+            margin: 0;
+        }
+
+        .lottery-page {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .lottery-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .lottery-header h1 {
+            font-size: 3rem;
+            color: rgb(5, 72, 27);
+            margin-bottom: 10px;
+        }
+
+        .lottery-header .subtitle {
+            font-size: 1.3rem;
+            font-style: italic;
+            color: rgb(65, 93, 74);
+            margin-bottom: 15px;
+        }
+
+        .lottery-header .tagline {
+            font-size: 1.1rem;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        .lottery-header .contact-info {
+            font-size: 0.95rem;
+            color: rgb(65, 93, 74);
+            font-style: italic;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 30px;
+            color: rgb(65, 93, 74);
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <main class="lottery-main">
+        <div class="lottery-page">
+            <div class="lottery-header">
+                <h1>Lunch Lottery</h1>
+                <p class="subtitle">Constellation</p>
+                <p class="tagline">Sign up before the deadline and get paired with a random colleague for lunch!</p>
+                <p class="contact-info">Questions? Contact Ida or Thomas.</p>
+            </div>
+
+            <div class="lottery-container">
+                <div class="deadline-info">
+                    <h3>Sign-up Deadline</h3>
+                    <p>Monday at 23:59</p>
+                    <div class="countdown" id="countdown"></div>
+                    <span class="status-badge" id="status-badge"></span>
+                </div>
+
+                <div class="participants-list">
+                    <div class="header-actions">
+                        <h3>Participants (<span id="participant-count">0</span>)</h3>
+                        <button class="btn btn-clear" onclick="clearAll()" id="clear-btn" style="display: none;">Clear All</button>
+                    </div>
+
+                    <div class="lunch-date-display">
+                        <span class="lunch-label">Lunch Date:</span>
+                        <span class="lunch-date" id="lunch-tuesday"></span>
+                    </div>
+
+                    <form class="signup-form" onsubmit="addParticipant(event)" id="signup-form">
+                        <div class="form-fields">
+                            <input type="text" id="name-input" placeholder="Enter your name" required>
+                            <input type="email" id="email-input" placeholder="Your email" required>
+                            <input type="text" id="slack-input" placeholder="Your Slack @-tag" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Sign Up</button>
+                    </form>
+
+                    <div id="participants-container">
+                        <p class="empty-state">No participants yet. Be the first to sign up.</p>
+                    </div>
+                </div>
+
+                
+                <div class="pairings-container" id="pairings-container"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- EmailJS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+
+    <script>
+        // ===========================================
+        // EmailJS Configuration
+        // ===========================================
+        const EMAILJS_PUBLIC_KEY = 'PMHAuoB_yfi5gP1x5';
+        const EMAILJS_SERVICE_ID = 'service_usmfa7l';
+        const EMAILJS_TEMPLATE_ID = 'template_gy9w0n8';
+        // ===========================================
+
+        // Storage keys
+        const PARTICIPANTS_KEY = 'lunch_lottery_participants';
+        const PAIRINGS_KEY = 'lunch_lottery_pairings';
+        const LOTTERY_RUN_KEY = 'lunch_lottery_run_date';
+
+        // Lunch jokes/wordplay (add more as desired!)
+        const LUNCH_JOKES = [
+            "Why did the lunch break up with breakfast? It needed more time to ketchup!",
+            "Lettuce celebrate - it's Taco Tuesday vibes!",
+            "This pairing is sub-lime!",
+            "You've bean selected for a great lunch date!",
+            "Olive you both - have a great meal!",
+            "This is nacho average lunch pairing!",
+            "Peas enjoy your lunch together!",
+            "You're one in a melon - great pairing!",
+            "Time to taco 'bout life over lunch!",
+            "This match is a big dill!",
+            // Add more jokes here...
+        ];
+
+        // Check if lottery should auto-run (deadline passed and not yet run this cycle)
+        function shouldAutoRunLottery() {
+            const now = new Date();
+            const lastRun = localStorage.getItem(LOTTERY_RUN_KEY);
+            const participants = getParticipants();
+
+            // Need at least 2 participants
+            if (participants.length < 2) return false;
+
+            // Check if we're past the deadline
+            const deadline = new Date();
+            deadline.setHours(17, 15, 0, 0); // TEMPORARY: 17:15 for testing
+
+            if (now < deadline) return false;
+
+            // Check if lottery was already run after this deadline
+            if (lastRun) {
+                const lastRunDate = new Date(lastRun);
+                if (lastRunDate > deadline) return false;
+            }
+
+            return true;
+        }
+
+        /* ORIGINAL - uncomment when done testing:
+        function shouldAutoRunLottery() {
+            const now = new Date();
+            const lastRun = localStorage.getItem(LOTTERY_RUN_KEY);
+            const participants = getParticipants();
+
+            if (participants.length < 2) return false;
+
+            const dayOfWeek = now.getDay();
+            const hour = now.getHours();
+            const minute = now.getMinutes();
+
+            const isPastDeadline = (dayOfWeek === 1 && (hour > 23 || (hour === 23 && minute >= 59))) ||
+                                   (dayOfWeek >= 2 && dayOfWeek <= 6) ||
+                                   (dayOfWeek === 0);
+
+            if (!isPastDeadline) return false;
+
+            if (lastRun) {
+                const lastRunDate = new Date(lastRun);
+                const lastMonday = getLastMonday();
+                if (lastRunDate > lastMonday) return false;
+            }
+
+            return true;
+        }
+
+        function getLastMonday() {
+            const now = new Date();
+            const dayOfWeek = now.getDay();
+            const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+
+            const lastMonday = new Date(now);
+            lastMonday.setDate(now.getDate() - daysSinceMonday);
+            lastMonday.setHours(23, 59, 0, 0);
+
+            return lastMonday;
+        }
+        */
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize EmailJS
+            if (EMAILJS_PUBLIC_KEY !== 'YOUR_PUBLIC_KEY') {
+                emailjs.init(EMAILJS_PUBLIC_KEY);
+            }
+
+            updateNextTuesday();
+            loadParticipants();
+            loadPairings();
+            updateCountdown();
+            setInterval(updateCountdown, 1000);
+
+            // Auto-run lottery if conditions are met
+            if (shouldAutoRunLottery()) {
+                runLottery();
+            }
+        });
+
+        // Get next Tuesday after the deadline
+        function getNextTuesday() {
+            const deadline = getNextDeadline();
+            const tuesday = new Date(deadline);
+            tuesday.setDate(deadline.getDate() + 1); // Day after Monday deadline
+            return tuesday;
+        }
+
+        // Update the Tuesday display
+        function updateNextTuesday() {
+            const tuesday = getNextTuesday();
+            const formatted = tuesday.toLocaleDateString('en-GB', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            });
+            document.getElementById('lunch-tuesday').textContent = formatted;
+        }
+
+        // Get next deadline - TEMPORARY: set to 17:15 today for testing
+        function getNextDeadline() {
+            const now = new Date();
+            const deadline = new Date(now);
+            deadline.setHours(17, 15, 0, 0);
+
+            // If past 17:15 today, set to tomorrow 17:15
+            if (now > deadline) {
+                deadline.setDate(deadline.getDate() + 1);
+            }
+
+            return deadline;
+        }
+
+        /* ORIGINAL - uncomment when done testing:
+        function getNextDeadline() {
+            const now = new Date();
+            const dayOfWeek = now.getDay();
+            const daysUntilMonday = dayOfWeek === 0 ? 1 : (dayOfWeek === 1 ? 0 : 8 - dayOfWeek);
+
+            const deadline = new Date(now);
+            deadline.setDate(now.getDate() + daysUntilMonday);
+            deadline.setHours(23, 59, 0, 0);
+
+            if (dayOfWeek === 1 && now.getHours() >= 23 && now.getMinutes() >= 59) {
+                deadline.setDate(deadline.getDate() + 7);
+            }
+
+            return deadline;
+        }
+        */
+
+        // Check if signup is open
+        function isSignupOpen() {
+            const now = new Date();
+            const dayOfWeek = now.getDay();
+
+            if (dayOfWeek === 1 && now.getHours() >= 23 && now.getMinutes() >= 59) {
+                return false;
+            }
+            return true;
+        }
+
+        // Update countdown display
+        function updateCountdown() {
+            const deadline = getNextDeadline();
+            const now = new Date();
+            const diff = deadline - now;
+
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+            const countdownEl = document.getElementById('countdown');
+            const statusBadge = document.getElementById('status-badge');
+            const signupForm = document.getElementById('signup-form');
+
+            if (diff > 0) {
+                countdownEl.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+                statusBadge.textContent = 'Sign-up Open';
+                statusBadge.className = 'status-badge status-open';
+                signupForm.style.display = 'flex';
+            } else {
+                countdownEl.textContent = 'Deadline passed!';
+                statusBadge.textContent = 'Sign-up Closed';
+                statusBadge.className = 'status-badge status-closed';
+                signupForm.style.display = 'none';
+            }
+
+            // Update Tuesday date display
+            updateNextTuesday();
+        }
+
+        // Get random joke
+        function getRandomJoke() {
+            if (LUNCH_JOKES.length === 0) return '';
+            return LUNCH_JOKES[Math.floor(Math.random() * LUNCH_JOKES.length)];
+        }
+
+        // Send notification email
+        async function sendPairingEmail(recipient, partnerName, partnerSlack) {
+            if (EMAILJS_PUBLIC_KEY === 'YOUR_PUBLIC_KEY') {
+                console.log('EmailJS not configured - skipping email to:', recipient.email);
+                return;
+            }
+
+            const joke = getRandomJoke();
+
+            try {
+                await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+                    to_email: recipient.email,
+                    to_name: recipient.name,
+                    partner_name: partnerName,
+                    partner_slack: partnerSlack,
+                    fun: joke ? `\n${joke}` : ''
+                });
+                console.log('Email sent to:', recipient.email);
+            } catch (error) {
+                console.error('Failed to send email to:', recipient.email, error);
+            }
+        }
+
+        // Load participants from localStorage
+        function loadParticipants() {
+            const participants = getParticipants();
+            renderParticipants(participants);
+        }
+
+        // Get participants from localStorage
+        function getParticipants() {
+            const stored = localStorage.getItem(PARTICIPANTS_KEY);
+            return stored ? JSON.parse(stored) : [];
+        }
+
+        // Save participants to localStorage
+        function saveParticipants(participants) {
+            localStorage.setItem(PARTICIPANTS_KEY, JSON.stringify(participants));
+        }
+
+        // Add a participant
+        function addParticipant(event) {
+            event.preventDefault();
+            const nameInput = document.getElementById('name-input');
+            const emailInput = document.getElementById('email-input');
+            const slackInput = document.getElementById('slack-input');
+
+            const name = nameInput.value.trim();
+            const email = emailInput.value.trim();
+            const slack = slackInput.value.trim();
+
+            if (!name || !email || !slack) return;
+
+            const participants = getParticipants();
+
+            // Check for duplicates by name or email
+            if (participants.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+                alert('This name is already signed up!');
+                return;
+            }
+            if (participants.some(p => p.email.toLowerCase() === email.toLowerCase())) {
+                alert('This email is already signed up!');
+                return;
+            }
+
+            participants.push({ name, email, slack });
+            saveParticipants(participants);
+            renderParticipants(participants);
+
+            nameInput.value = '';
+            emailInput.value = '';
+            slackInput.value = '';
+
+            // Clear old pairings when new participant joins
+            clearPairings();
+        }
+
+        // Remove a participant
+        function removeParticipant(index) {
+            const participants = getParticipants();
+            participants.splice(index, 1);
+            saveParticipants(participants);
+            renderParticipants(participants);
+            clearPairings();
+        }
+
+        // Render participants list
+        function renderParticipants(participants) {
+            const container = document.getElementById('participants-container');
+            const countEl = document.getElementById('participant-count');
+            const clearBtn = document.getElementById('clear-btn');
+
+            countEl.textContent = participants.length;
+            clearBtn.style.display = participants.length > 0 ? 'block' : 'none';
+
+            if (participants.length === 0) {
+                container.innerHTML = '<p class="empty-state">No participants yet. Be the first to sign up.</p>';
+                return;
+            }
+
+            container.innerHTML = participants.map((p, index) => {
+                return `
+                <div class="participant-item">
+                    <div class="participant-info">
+                        <span class="participant-name">${p.name}</span>
+                        <span class="participant-slack">@${p.slack}</span>
+                        <span class="participant-email">${p.email}</span>
+                    </div>
+                    <button class="remove-btn" onclick="removeParticipant(${index})" title="Remove">&times;</button>
+                </div>
+            `}).join('');
+        }
+
+        // Clear all participants
+        function clearAll() {
+            if (confirm('Are you sure you want to remove all participants?')) {
+                saveParticipants([]);
+                renderParticipants([]);
+                clearPairings();
+            }
+        }
+
+        // Run the lottery
+        async function runLottery() {
+            const participants = getParticipants();
+
+            if (participants.length < 2) {
+                alert('Need at least 2 participants to run the lottery!');
+                return;
+            }
+
+            // Shuffle participants using Fisher-Yates algorithm
+            const shuffled = [...participants];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+
+            // Create pairs
+            const pairings = [];
+            for (let i = 0; i < shuffled.length; i += 2) {
+                if (i + 1 < shuffled.length) {
+                    pairings.push([shuffled[i], shuffled[i + 1]]);
+                } else {
+                    // Odd person out - add to last pair as trio
+                    if (pairings.length > 0) {
+                        pairings[pairings.length - 1].push(shuffled[i]);
+                    } else {
+                        pairings.push([shuffled[i]]);
+                    }
+                }
+            }
+
+            // Save pairings
+            localStorage.setItem(PAIRINGS_KEY, JSON.stringify(pairings));
+            localStorage.setItem(LOTTERY_RUN_KEY, new Date().toISOString());
+
+            renderPairings(pairings);
+
+            // Send notification emails
+            for (const pair of pairings) {
+                if (pair.length === 2) {
+                    // Send email to person 1 about person 2
+                    await sendPairingEmail(pair[0], pair[1].name, pair[1].slack);
+                    // Send email to person 2 about person 1
+                    await sendPairingEmail(pair[1], pair[0].name, pair[0].slack);
+                } else if (pair.length === 3) {
+                    // Trio - notify each about the other two
+                    await sendPairingEmail(pair[0], `${pair[1].name} and ${pair[2].name}`, `${pair[1].slack} & ${pair[2].slack}`);
+                    await sendPairingEmail(pair[1], `${pair[0].name} and ${pair[2].name}`, `${pair[0].slack} & ${pair[2].slack}`);
+                    await sendPairingEmail(pair[2], `${pair[0].name} and ${pair[1].name}`, `${pair[0].slack} & ${pair[1].slack}`);
+                }
+            }
+
+            if (EMAILJS_PUBLIC_KEY !== 'YOUR_PUBLIC_KEY') {
+                alert('Lottery complete! Notification emails have been sent.');
+            }
+        }
+
+        // Load pairings from localStorage
+        function loadPairings() {
+            const stored = localStorage.getItem(PAIRINGS_KEY);
+            if (stored) {
+                const pairings = JSON.parse(stored);
+                renderPairings(pairings);
+            }
+        }
+
+        // Clear pairings
+        function clearPairings() {
+            localStorage.removeItem(PAIRINGS_KEY);
+            localStorage.removeItem(LOTTERY_RUN_KEY);
+            document.getElementById('pairings-container').innerHTML = '';
+        }
+
+        // Render pairings
+        function renderPairings(pairings) {
+            const container = document.getElementById('pairings-container');
+
+            if (!pairings || pairings.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            const lunchEmojis = ['🍕', '🍔', '🥗', '🍜', '🍱', '🌮', '🥪', '🍛'];
+
+            container.innerHTML = `
+                <h3 style="color: rgb(5, 72, 27); margin-bottom: 15px;">This Week's Lunch Pairs</h3>
+                <p style="color: #555; margin-bottom: 20px; font-size: 0.95rem;">Contact your partner on Slack to arrange where to meet!</p>
+                ${pairings.map((pair, index) => {
+                    const emoji = lunchEmojis[index % lunchEmojis.length];
+                    if (pair.length === 2) {
+                        return `
+                            <div class="pairing-card" style="animation-delay: ${index * 0.1}s">
+                                <div class="lunch-emoji">${emoji}</div>
+                                <div class="names">
+                                    ${pair[0].name} <span class="heart">&hearts;</span> ${pair[1].name}
+                                </div>
+                                <div class="slack-handles">@${pair[0].slack} + @${pair[1].slack}</div>
+                            </div>
+                        `;
+                    } else if (pair.length === 3) {
+                        return `
+                            <div class="pairing-card trio-card" style="animation-delay: ${index * 0.1}s">
+                                <div class="lunch-emoji">${emoji}</div>
+                                <div class="names">
+                                    ${pair[0].name} <span class="heart">&hearts;</span> ${pair[1].name} <span class="heart">&hearts;</span> ${pair[2].name}
+                                </div>
+                                <div class="slack-handles">@${pair[0].slack} + @${pair[1].slack} + @${pair[2].slack}</div>
+                            </div>
+                        `;
+                    } else {
+                        return `
+                            <div class="pairing-card solo-card" style="animation-delay: ${index * 0.1}s">
+                                <div class="lunch-emoji">🎲</div>
+                                <div class="names">
+                                    ${pair[0].name}
+                                </div>
+                                <div class="slack-handles">@${pair[0].slack}</div>
+                            </div>
+                        `;
+                    }
+                }).join('')}
+            `;
+        }
+    </script>
+</body>
+</html>
