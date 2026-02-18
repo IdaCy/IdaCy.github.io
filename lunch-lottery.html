@@ -731,16 +731,18 @@
             }
         }
 
-        // Clear all participants (admin only - call from console)
+        // Clear all participants (admin only - call from console: clearAll())
+        // Note: With the rotating two-sheet system, this clears BOTH sheets and resets to Sheet A
+        // Normally not needed as the rotation handles everything automatically
         async function clearAll() {
-            if (confirm('Are you sure you want to remove all participants?')) {
+            if (confirm('Are you sure you want to remove all participants and reset everything?')) {
                 try {
                     await fetch(SHEETS_API_URL, {
                         method: 'POST',
                         body: JSON.stringify({ action: 'clearAll' })
                     });
                     clearPairings();
-                    alert('All participants cleared!');
+                    alert('All cleared and reset to Sheet A!');
                 } catch (error) {
                     console.error('Failed to clear participants:', error);
                 }
@@ -748,9 +750,11 @@
         }
 
         // Run the lottery via Google Sheets
+        // With rotating two-sheet system: runs lottery on current active sheet,
+        // saves pairings, then automatically switches to other sheet for new signups
         async function runLottery() {
             try {
-                // Call Google Sheets to run lottery and save pairings
+                // Call Google Sheets to run lottery, save pairings, and switch sheets
                 const response = await fetch(SHEETS_API_URL, {
                     method: 'POST',
                     body: JSON.stringify({ action: 'runLottery' })
