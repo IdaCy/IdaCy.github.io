@@ -440,6 +440,7 @@
         ];
 
         // Check if lottery should auto-run (deadline passed and not yet run this cycle)
+        // Uses the rotating two-sheet system - no manual resets needed
         async function shouldAutoRunLottery() {
             const now = new Date();
             const participants = await getParticipants();
@@ -448,18 +449,20 @@
             if (participants.length < 2) return false;
 
             // Check if we're past the deadline
-            const deadline = new Date();
-            deadline.setHours(17, 47, 0, 0); // TEMPORARY: 17:35 for testing
-
+            const deadline = getNextDeadline();
             if (now < deadline) return false;
 
-            // Check if lottery was already run (from Google Sheets)
+            // Check status from Google Sheets (rotating system)
             try {
-                const response = await fetch(SHEETS_API_URL + '?action=getPairings');
+                const response = await fetch(SHEETS_API_URL + '?action=getStatus');
                 const data = await response.json();
-                if (data.success && data.lotteryRun) {
-                    const lastRunDate = new Date(data.lotteryRun);
-                    if (lastRunDate > deadline) return false;
+                if (data.success && data.lastLotteryRun) {
+                    const lastRunDate = new Date(data.lastLotteryRun);
+                    // If lottery was run after current deadline, skip
+                    // (meaning it was already run for this cycle)
+                    const currentCycleStart = new Date(deadline);
+                    currentCycleStart.setDate(currentCycleStart.getDate() - 7); // One week ago
+                    if (lastRunDate > currentCycleStart) return false;
                 }
             } catch (error) {
                 console.error('Failed to check lottery status:', error);
@@ -468,10 +471,9 @@
             return true;
         }
 
-        /* ORIGINAL - uncomment when done testing:
+        /* PRODUCTION MODE - uncomment when done testing:
         async function shouldAutoRunLottery() {
             const now = new Date();
-            const lastRun = localStorage.getItem(LOTTERY_RUN_KEY);
             const participants = await getParticipants();
 
             if (participants.length < 2) return false;
@@ -480,16 +482,24 @@
             const hour = now.getHours();
             const minute = now.getMinutes();
 
+            // Check if past Monday 23:59
             const isPastDeadline = (dayOfWeek === 1 && (hour > 23 || (hour === 23 && minute >= 59))) ||
                                    (dayOfWeek >= 2 && dayOfWeek <= 6) ||
                                    (dayOfWeek === 0);
 
             if (!isPastDeadline) return false;
 
-            if (lastRun) {
-                const lastRunDate = new Date(lastRun);
-                const lastMonday = getLastMonday();
-                if (lastRunDate > lastMonday) return false;
+            // Check status from rotating system
+            try {
+                const response = await fetch(SHEETS_API_URL + '?action=getStatus');
+                const data = await response.json();
+                if (data.success && data.lastLotteryRun) {
+                    const lastRunDate = new Date(data.lastLotteryRun);
+                    const lastMonday = getLastMonday();
+                    if (lastRunDate > lastMonday) return false;
+                }
+            } catch (error) {
+                console.error('Failed to check lottery status:', error);
             }
 
             return true;
@@ -508,59 +518,7 @@
         }
         */
 
-        // Check if weekly reset is needed (24h after deadline = Tuesday 23:59 in production)
-        async function shouldWeeklyReset() {
-            const now = new Date();
-
-            // TESTING MODE: Reset 2 minutes after deadline
-            const deadline = new Date();
-            deadline.setHours(17, 47, 0, 0); // Current test deadline
-            const resetTime = new Date(deadline);
-            resetTime.setMinutes(deadline.getMinutes() + 2); // 2 min after deadline
-
-            /* PRODUCTION MODE: Reset 24h after Monday 23:59 = Tuesday 23:59
-            const deadline = getNextDeadline(); // Monday 23:59
-            const resetTime = new Date(deadline);
-            resetTime.setDate(resetTime.getDate() + 1); // Tuesday 23:59
-            */
-
-            // Only reset if we're past reset time
-            if (now > resetTime) {
-                // Check if there's old data to clear
-                try {
-                    const response = await fetch(SHEETS_API_URL + '?action=getPairings');
-                    const data = await response.json();
-                    if (data.success && data.lotteryRun) {
-                        const lotteryRunDate = new Date(data.lotteryRun);
-                        // If lottery was run before reset time, we need to reset
-                        if (lotteryRunDate < resetTime) {
-                            return true;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Failed to check reset status:', error);
-                }
-            }
-
-            return false;
-        }
-
-        // Perform weekly reset
-        async function performWeeklyReset() {
-            console.log('Performing weekly reset...');
-            try {
-                await fetch(SHEETS_API_URL, {
-                    method: 'POST',
-                    body: JSON.stringify({ action: 'clearAll' })
-                });
-                console.log('Weekly reset complete!');
-                clearPairings();
-            } catch (error) {
-                console.error('Failed to reset:', error);
-            }
-        }
-
-        // Initialize
+        // Initialize - no manual resets needed with rotating two-sheet system
         document.addEventListener('DOMContentLoaded', async function() {
             // Initialize EmailJS
             if (EMAILJS_PUBLIC_KEY !== 'YOUR_PUBLIC_KEY') {
@@ -571,12 +529,7 @@
             updateCountdown();
             setInterval(updateCountdown, 1000);
 
-            // Check for weekly reset first
-            if (await shouldWeeklyReset()) {
-                await performWeeklyReset();
-            }
-
-            // Load pairings (if any exist after potential reset)
+            // Load pairings (always shows current pairings from Google Sheets)
             await loadPairings();
 
             // Auto-run lottery if conditions are met
@@ -609,7 +562,7 @@
         function getNextDeadline() {
             const now = new Date();
             const deadline = new Date(now);
-            deadline.setHours(17, 47, 0, 0);
+            deadline.setHours(17, 40, 0, 0);
 
             // If past 17:15 today, set to tomorrow 17:15
             if (now > deadline) {
@@ -870,9 +823,9 @@
                             <div class="pairing-card" style="animation-delay: ${index * 0.1}s">
                                 <div class="lunch-emoji">${emoji}</div>
                                 <div class="names">
-                                    ${pair[0].name} <span class="heart">&hearts;</span> ${pair[1].name}
+                                    ${pair[0].name} &amp; ${pair[1].name}
                                 </div>
-                                <div class="slack-handles">@${pair[0].slack} + @${pair[1].slack}</div>
+                                <div class="slack-handles">${pair[0].slack} + ${pair[1].slack}</div>
                             </div>
                         `;
                     } else if (pair.length === 3) {
@@ -880,9 +833,9 @@
                             <div class="pairing-card trio-card" style="animation-delay: ${index * 0.1}s">
                                 <div class="lunch-emoji">${emoji}</div>
                                 <div class="names">
-                                    ${pair[0].name} <span class="heart">&hearts;</span> ${pair[1].name} <span class="heart">&hearts;</span> ${pair[2].name}
+                                    ${pair[0].name} &amp; ${pair[1].name} &amp; ${pair[2].name}
                                 </div>
-                                <div class="slack-handles">@${pair[0].slack} + @${pair[1].slack} + @${pair[2].slack}</div>
+                                <div class="slack-handles">${pair[0].slack} + ${pair[1].slack} + ${pair[2].slack}</div>
                             </div>
                         `;
                     } else {
@@ -892,7 +845,7 @@
                                 <div class="names">
                                     ${pair[0].name}
                                 </div>
-                                <div class="slack-handles">@${pair[0].slack}</div>
+                                <div class="slack-handles">${pair[0].slack}</div>
                             </div>
                         `;
                     }

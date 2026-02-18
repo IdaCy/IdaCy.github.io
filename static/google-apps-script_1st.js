@@ -1,3 +1,19 @@
+// ==============================================
+// LUNCH LOTTERY - ROTATING TWO-SHEET SYSTEM - SHEET 1
+// ==============================================
+//
+// Sheets needed in Google Spreadsheet:
+// - Participants_A (Name, Email, Slack, SignupDate)
+// - Participants_B (Name, Email, Slack, SignupDate)
+// - Pairings (Name, Email, Slack, PairGroup) + Row 2 has lottery date
+// - Config (Key, Value) - tracks which sheet is active
+//
+// Flow:
+// Week 1: Signups → Sheet A → Monday lottery → Display A pairings → Signups → Sheet B
+// Week 2: Signups → Sheet B → Monday lottery → Display B pairings → Clear A → Signups → Sheet A
+// (repeats)
+// ==============================================
+
 // Handle GET requests (read participants or pairings)
 function doGet(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
