@@ -454,7 +454,7 @@
 
             // Check if we're past the deadline
             const deadline = new Date();
-            deadline.setHours(17, 30, 0, 0); // TEMPORARY: 17:30 for testing
+            deadline.setHours(17, 35, 0, 0); // TEMPORARY: 17:30 for testing
 
             if (now < deadline) return false;
 
@@ -549,7 +549,7 @@
         function getNextDeadline() {
             const now = new Date();
             const deadline = new Date(now);
-            deadline.setHours(17, 30, 0, 0);
+            deadline.setHours(17, 35, 0, 0);
 
             // If past 17:15 today, set to tomorrow 17:15
             if (now > deadline) {
