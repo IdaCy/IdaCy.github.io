@@ -611,6 +611,16 @@
             const countdownEl = document.getElementById('countdown');
             const statusBadge = document.getElementById('status-badge');
             const signupForm = document.getElementById('signup-form');
+            const deadlineText = document.getElementById('deadline-text');
+
+            // Update deadline text with dynamic day and time
+            const deadlineDay = deadline.toLocaleDateString('en-US', { weekday: 'long' });
+            const deadlineTime = deadline.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+            deadlineText.textContent = `${deadlineDay} at ${deadlineTime} PST`;
 
             if (diff > 0) {
                 countdownEl.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
