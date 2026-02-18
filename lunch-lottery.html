@@ -562,31 +562,12 @@
             document.getElementById('lunch-tuesday').textContent = formatted;
         }
 
-        // Get next deadline - TEMPORARY: 2 minutes from page load
-        // Use separate variable for display vs lottery trigger
-        let testDeadline = null;
+        // PRODUCTION: Deadline is Monday 23:59 (Tuesday midnight)
         let lotteryTriggered = false;
 
         function getNextDeadline() {
             const now = new Date();
-            if (!testDeadline) {
-                testDeadline = new Date();
-                testDeadline.setMinutes(testDeadline.getMinutes() + 5);
-            }
-            return testDeadline;
-        }
-
-        // Advance deadline to next cycle (called after lottery runs)
-        function advanceDeadline() {
-            testDeadline = new Date();
-            testDeadline.setMinutes(testDeadline.getMinutes() + 5);
-            // Don't reset lotteryTriggered here - it resets on page reload
-        }
-
-        /* PRODUCTION - uncomment when done testing:
-        function getNextDeadline() {
-            const now = new Date();
-            const dayOfWeek = now.getDay();
+            const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, 2=Tue, etc.
 
             // Calculate next Monday 23:59
             let daysUntilMonday;
@@ -605,7 +586,12 @@
 
             return deadline;
         }
-        */
+
+        // Advance deadline to next week (called after lottery runs)
+        function advanceDeadline() {
+            // Next deadline is 7 days from current deadline
+            // lotteryTriggered stays true - resets on page reload
+        }
 
         // Check if signup is open
         function isSignupOpen() {
