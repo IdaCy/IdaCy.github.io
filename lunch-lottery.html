@@ -197,6 +197,15 @@
             margin-top: 5px;
         }
 
+        .signup-confirmation {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            margin-top: 15px;
+        }
+
         .empty-state {
             color: #666;
             font-style: italic;
@@ -376,12 +385,7 @@
                     <span class="status-badge" id="status-badge"></span>
                 </div>
 
-                <div class="participants-list">
-                    <div class="header-actions">
-                        <h3>Participants (<span id="participant-count">0</span>)</h3>
-                        <button class="btn btn-clear" onclick="clearAll()" id="clear-btn" style="display: none;">Clear All</button>
-                    </div>
-
+                <div class="signup-section">
                     <div class="lunch-date-display">
                         <span class="lunch-label">Lunch Date:</span>
                         <span class="lunch-date" id="lunch-tuesday"></span>
@@ -396,9 +400,7 @@
                         <button type="submit" class="btn btn-primary">Sign Up</button>
                     </form>
 
-                    <div id="participants-container">
-                        <p class="empty-state">No participants yet. Be the first to sign up.</p>
-                    </div>
+                    <p class="signup-confirmation" id="signup-confirmation" style="display: none;"></p>
                 </div>
 
                 
@@ -419,8 +421,10 @@
         const EMAILJS_TEMPLATE_ID = 'template_gy9w0n8';
         // ===========================================
 
-        // Storage keys
-        const PARTICIPANTS_KEY = 'lunch_lottery_participants';
+        // Google Sheets API
+        const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbyAVxKkjNpQSAcG-6Q5mt8O5MKkWNEs7gb56bYft7kht28gI7K421AUDcOv8cBlar9x/exec';
+
+        // Local storage keys (for lottery run tracking only)
         const PAIRINGS_KEY = 'lunch_lottery_pairings';
         const LOTTERY_RUN_KEY = 'lunch_lottery_run_date';
 
@@ -440,17 +444,17 @@
         ];
 
         // Check if lottery should auto-run (deadline passed and not yet run this cycle)
-        function shouldAutoRunLottery() {
+        async function shouldAutoRunLottery() {
             const now = new Date();
             const lastRun = localStorage.getItem(LOTTERY_RUN_KEY);
-            const participants = getParticipants();
+            const participants = await getParticipants();
 
             // Need at least 2 participants
             if (participants.length < 2) return false;
 
             // Check if we're past the deadline
             const deadline = new Date();
-            deadline.setHours(17, 15, 0, 0); // TEMPORARY: 17:15 for testing
+            deadline.setHours(17, 30, 0, 0); // TEMPORARY: 17:30 for testing
 
             if (now < deadline) return false;
 
@@ -464,10 +468,10 @@
         }
 
         /* ORIGINAL - uncomment when done testing:
-        function shouldAutoRunLottery() {
+        async function shouldAutoRunLottery() {
             const now = new Date();
             const lastRun = localStorage.getItem(LOTTERY_RUN_KEY);
-            const participants = getParticipants();
+            const participants = await getParticipants();
 
             if (participants.length < 2) return false;
 
@@ -504,20 +508,19 @@
         */
 
         // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             // Initialize EmailJS
             if (EMAILJS_PUBLIC_KEY !== 'YOUR_PUBLIC_KEY') {
                 emailjs.init(EMAILJS_PUBLIC_KEY);
             }
 
             updateNextTuesday();
-            loadParticipants();
             loadPairings();
             updateCountdown();
             setInterval(updateCountdown, 1000);
 
             // Auto-run lottery if conditions are met
-            if (shouldAutoRunLottery()) {
+            if (await shouldAutoRunLottery()) {
                 runLottery();
             }
         });
@@ -546,7 +549,7 @@
         function getNextDeadline() {
             const now = new Date();
             const deadline = new Date(now);
-            deadline.setHours(17, 15, 0, 0);
+            deadline.setHours(17, 30, 0, 0);
 
             // If past 17:15 today, set to tomorrow 17:15
             if (now > deadline) {
@@ -645,29 +648,28 @@
             }
         }
 
-        // Load participants from localStorage
-        function loadParticipants() {
-            const participants = getParticipants();
-            renderParticipants(participants);
+        // Get participants from Google Sheets
+        async function getParticipants() {
+            try {
+                const response = await fetch(SHEETS_API_URL);
+                const data = await response.json();
+                if (data.success) {
+                    return data.participants;
+                }
+                return [];
+            } catch (error) {
+                console.error('Failed to fetch participants:', error);
+                return [];
+            }
         }
 
-        // Get participants from localStorage
-        function getParticipants() {
-            const stored = localStorage.getItem(PARTICIPANTS_KEY);
-            return stored ? JSON.parse(stored) : [];
-        }
-
-        // Save participants to localStorage
-        function saveParticipants(participants) {
-            localStorage.setItem(PARTICIPANTS_KEY, JSON.stringify(participants));
-        }
-
-        // Add a participant
-        function addParticipant(event) {
+        // Add a participant via Google Sheets
+        async function addParticipant(event) {
             event.preventDefault();
             const nameInput = document.getElementById('name-input');
             const emailInput = document.getElementById('email-input');
             const slackInput = document.getElementById('slack-input');
+            const submitBtn = event.target.querySelector('button[type="submit"]');
 
             const name = nameInput.value.trim();
             const email = emailInput.value.trim();
@@ -675,81 +677,69 @@
 
             if (!name || !email || !slack) return;
 
-            const participants = getParticipants();
+            // Disable button while submitting
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Signing up...';
 
-            // Check for duplicates by name or email
-            if (participants.some(p => p.name.toLowerCase() === name.toLowerCase())) {
-                alert('This name is already signed up!');
-                return;
+            try {
+                const response = await fetch(SHEETS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'addParticipant',
+                        name: name,
+                        email: email,
+                        slack: slack
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    nameInput.value = '';
+                    emailInput.value = '';
+                    slackInput.value = '';
+
+                    // Show confirmation
+                    const confirmation = document.getElementById('signup-confirmation');
+                    confirmation.textContent = `Thanks ${name}! You're signed up for the lunch lottery.`;
+                    confirmation.style.display = 'block';
+
+                    // Clear old pairings when new participant joins
+                    clearPairings();
+                } else {
+                    alert(data.error || 'Failed to sign up. Please try again.');
+                }
+            } catch (error) {
+                console.error('Failed to add participant:', error);
+                alert('Failed to sign up. Please try again.');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Sign Up';
             }
-            if (participants.some(p => p.email.toLowerCase() === email.toLowerCase())) {
-                alert('This email is already signed up!');
-                return;
-            }
-
-            participants.push({ name, email, slack });
-            saveParticipants(participants);
-            renderParticipants(participants);
-
-            nameInput.value = '';
-            emailInput.value = '';
-            slackInput.value = '';
-
-            // Clear old pairings when new participant joins
-            clearPairings();
         }
 
-        // Remove a participant
-        function removeParticipant(index) {
-            const participants = getParticipants();
-            participants.splice(index, 1);
-            saveParticipants(participants);
-            renderParticipants(participants);
-            clearPairings();
-        }
-
-        // Render participants list
-        function renderParticipants(participants) {
-            const container = document.getElementById('participants-container');
-            const countEl = document.getElementById('participant-count');
-            const clearBtn = document.getElementById('clear-btn');
-
-            countEl.textContent = participants.length;
-            clearBtn.style.display = participants.length > 0 ? 'block' : 'none';
-
-            if (participants.length === 0) {
-                container.innerHTML = '<p class="empty-state">No participants yet. Be the first to sign up.</p>';
-                return;
-            }
-
-            container.innerHTML = participants.map((p, index) => {
-                return `
-                <div class="participant-item">
-                    <div class="participant-info">
-                        <span class="participant-name">${p.name}</span>
-                        <span class="participant-slack">@${p.slack}</span>
-                        <span class="participant-email">${p.email}</span>
-                    </div>
-                    <button class="remove-btn" onclick="removeParticipant(${index})" title="Remove">&times;</button>
-                </div>
-            `}).join('');
-        }
-
-        // Clear all participants
-        function clearAll() {
+        // Clear all participants (admin only - call from console)
+        async function clearAll() {
             if (confirm('Are you sure you want to remove all participants?')) {
-                saveParticipants([]);
-                renderParticipants([]);
-                clearPairings();
+                try {
+                    await fetch(SHEETS_API_URL, {
+                        method: 'POST',
+                        body: JSON.stringify({ action: 'clearAll' })
+                    });
+                    clearPairings();
+                    alert('All participants cleared!');
+                } catch (error) {
+                    console.error('Failed to clear participants:', error);
+                }
             }
         }
 
         // Run the lottery
         async function runLottery() {
-            const participants = getParticipants();
+            const participants = await getParticipants();
 
             if (participants.length < 2) {
-                alert('Need at least 2 participants to run the lottery!');
+                console.log('Not enough participants to run lottery');
                 return;
             }
 
