@@ -558,18 +558,14 @@
             document.getElementById('lunch-tuesday').textContent = formatted;
         }
 
-        // Get next deadline - TEMPORARY: set to 17:15 today for testing
+        // Get next deadline - TEMPORARY: set to 2 minutes from page load for testing
+        let testDeadline = null;
         function getNextDeadline() {
-            const now = new Date();
-            const deadline = new Date(now);
-            deadline.setHours(17, 40, 0, 0);
-
-            // If past 17:15 today, set to tomorrow 17:15
-            if (now > deadline) {
-                deadline.setDate(deadline.getDate() + 1);
+            if (!testDeadline) {
+                testDeadline = new Date();
+                testDeadline.setMinutes(testDeadline.getMinutes() + 2);
             }
-
-            return deadline;
+            return testDeadline;
         }
 
         /* ORIGINAL - uncomment when done testing:
