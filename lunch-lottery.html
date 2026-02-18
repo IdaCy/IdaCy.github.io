@@ -571,7 +571,7 @@
             const now = new Date();
             if (!testDeadline) {
                 testDeadline = new Date();
-                testDeadline.setMinutes(testDeadline.getMinutes() + 2);
+                testDeadline.setMinutes(testDeadline.getMinutes() + 1);
             }
             return testDeadline;
         }
@@ -579,7 +579,7 @@
         // Advance deadline to next cycle (called after lottery runs)
         function advanceDeadline() {
             testDeadline = new Date();
-            testDeadline.setMinutes(testDeadline.getMinutes() + 2);
+            testDeadline.setMinutes(testDeadline.getMinutes() + 1);
             // Don't reset lotteryTriggered here - it resets on page reload
         }
 
