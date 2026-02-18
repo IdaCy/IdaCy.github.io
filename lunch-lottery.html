@@ -424,10 +424,6 @@
         // Google Sheets API
         const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbyAVxKkjNpQSAcG-6Q5mt8O5MKkWNEs7gb56bYft7kht28gI7K421AUDcOv8cBlar9x/exec';
 
-        // Local storage keys (for lottery run tracking only)
-        const PAIRINGS_KEY = 'lunch_lottery_pairings';
-        const LOTTERY_RUN_KEY = 'lunch_lottery_run_date';
-
         // Lunch jokes/wordplay (add more as desired!)
         const LUNCH_JOKES = [
             "Why did the lunch break up with breakfast? It needed more time to ketchup!",
@@ -446,7 +442,6 @@
         // Check if lottery should auto-run (deadline passed and not yet run this cycle)
         async function shouldAutoRunLottery() {
             const now = new Date();
-            const lastRun = localStorage.getItem(LOTTERY_RUN_KEY);
             const participants = await getParticipants();
 
             // Need at least 2 participants
@@ -454,14 +449,20 @@
 
             // Check if we're past the deadline
             const deadline = new Date();
-            deadline.setHours(17, 35, 0, 0); // TEMPORARY: 17:30 for testing
+            deadline.setHours(17, 47, 0, 0); // TEMPORARY: 17:35 for testing
 
             if (now < deadline) return false;
 
-            // Check if lottery was already run after this deadline
-            if (lastRun) {
-                const lastRunDate = new Date(lastRun);
-                if (lastRunDate > deadline) return false;
+            // Check if lottery was already run (from Google Sheets)
+            try {
+                const response = await fetch(SHEETS_API_URL + '?action=getPairings');
+                const data = await response.json();
+                if (data.success && data.lotteryRun) {
+                    const lastRunDate = new Date(data.lotteryRun);
+                    if (lastRunDate > deadline) return false;
+                }
+            } catch (error) {
+                console.error('Failed to check lottery status:', error);
             }
 
             return true;
@@ -507,6 +508,58 @@
         }
         */
 
+        // Check if weekly reset is needed (24h after deadline = Tuesday 23:59 in production)
+        async function shouldWeeklyReset() {
+            const now = new Date();
+
+            // TESTING MODE: Reset 2 minutes after deadline
+            const deadline = new Date();
+            deadline.setHours(17, 47, 0, 0); // Current test deadline
+            const resetTime = new Date(deadline);
+            resetTime.setMinutes(deadline.getMinutes() + 2); // 2 min after deadline
+
+            /* PRODUCTION MODE: Reset 24h after Monday 23:59 = Tuesday 23:59
+            const deadline = getNextDeadline(); // Monday 23:59
+            const resetTime = new Date(deadline);
+            resetTime.setDate(resetTime.getDate() + 1); // Tuesday 23:59
+            */
+
+            // Only reset if we're past reset time
+            if (now > resetTime) {
+                // Check if there's old data to clear
+                try {
+                    const response = await fetch(SHEETS_API_URL + '?action=getPairings');
+                    const data = await response.json();
+                    if (data.success && data.lotteryRun) {
+                        const lotteryRunDate = new Date(data.lotteryRun);
+                        // If lottery was run before reset time, we need to reset
+                        if (lotteryRunDate < resetTime) {
+                            return true;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to check reset status:', error);
+                }
+            }
+
+            return false;
+        }
+
+        // Perform weekly reset
+        async function performWeeklyReset() {
+            console.log('Performing weekly reset...');
+            try {
+                await fetch(SHEETS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'clearAll' })
+                });
+                console.log('Weekly reset complete!');
+                clearPairings();
+            } catch (error) {
+                console.error('Failed to reset:', error);
+            }
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', async function() {
             // Initialize EmailJS
@@ -515,13 +568,20 @@
             }
 
             updateNextTuesday();
-            loadPairings();
             updateCountdown();
             setInterval(updateCountdown, 1000);
 
+            // Check for weekly reset first
+            if (await shouldWeeklyReset()) {
+                await performWeeklyReset();
+            }
+
+            // Load pairings (if any exist after potential reset)
+            await loadPairings();
+
             // Auto-run lottery if conditions are met
             if (await shouldAutoRunLottery()) {
-                runLottery();
+                await runLottery();
             }
         });
 
@@ -549,7 +609,7 @@
         function getNextDeadline() {
             const now = new Date();
             const deadline = new Date(now);
-            deadline.setHours(17, 35, 0, 0);
+            deadline.setHours(17, 47, 0, 0);
 
             // If past 17:15 today, set to tomorrow 17:15
             if (now > deadline) {
@@ -734,76 +794,58 @@
             }
         }
 
-        // Run the lottery
+        // Run the lottery via Google Sheets
         async function runLottery() {
-            const participants = await getParticipants();
+            try {
+                // Call Google Sheets to run lottery and save pairings
+                const response = await fetch(SHEETS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'runLottery' })
+                });
 
-            if (participants.length < 2) {
-                console.log('Not enough participants to run lottery');
-                return;
-            }
+                const data = await response.json();
 
-            // Shuffle participants using Fisher-Yates algorithm
-            const shuffled = [...participants];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
+                if (!data.success) {
+                    console.log('Lottery failed:', data.error);
+                    return;
+                }
 
-            // Create pairs
-            const pairings = [];
-            for (let i = 0; i < shuffled.length; i += 2) {
-                if (i + 1 < shuffled.length) {
-                    pairings.push([shuffled[i], shuffled[i + 1]]);
-                } else {
-                    // Odd person out - add to last pair as trio
-                    if (pairings.length > 0) {
-                        pairings[pairings.length - 1].push(shuffled[i]);
-                    } else {
-                        pairings.push([shuffled[i]]);
+                const pairings = data.pairings;
+                renderPairings(pairings);
+
+                // Send notification emails
+                for (const pair of pairings) {
+                    if (pair.length === 2) {
+                        await sendPairingEmail(pair[0], pair[1].name, pair[1].slack);
+                        await sendPairingEmail(pair[1], pair[0].name, pair[0].slack);
+                    } else if (pair.length === 3) {
+                        await sendPairingEmail(pair[0], `${pair[1].name} and ${pair[2].name}`, `${pair[1].slack} & ${pair[2].slack}`);
+                        await sendPairingEmail(pair[1], `${pair[0].name} and ${pair[2].name}`, `${pair[0].slack} & ${pair[2].slack}`);
+                        await sendPairingEmail(pair[2], `${pair[0].name} and ${pair[1].name}`, `${pair[0].slack} & ${pair[1].slack}`);
                     }
                 }
+
+                console.log('Lottery complete! Emails sent.');
+            } catch (error) {
+                console.error('Failed to run lottery:', error);
             }
+        }
 
-            // Save pairings
-            localStorage.setItem(PAIRINGS_KEY, JSON.stringify(pairings));
-            localStorage.setItem(LOTTERY_RUN_KEY, new Date().toISOString());
-
-            renderPairings(pairings);
-
-            // Send notification emails
-            for (const pair of pairings) {
-                if (pair.length === 2) {
-                    // Send email to person 1 about person 2
-                    await sendPairingEmail(pair[0], pair[1].name, pair[1].slack);
-                    // Send email to person 2 about person 1
-                    await sendPairingEmail(pair[1], pair[0].name, pair[0].slack);
-                } else if (pair.length === 3) {
-                    // Trio - notify each about the other two
-                    await sendPairingEmail(pair[0], `${pair[1].name} and ${pair[2].name}`, `${pair[1].slack} & ${pair[2].slack}`);
-                    await sendPairingEmail(pair[1], `${pair[0].name} and ${pair[2].name}`, `${pair[0].slack} & ${pair[2].slack}`);
-                    await sendPairingEmail(pair[2], `${pair[0].name} and ${pair[1].name}`, `${pair[0].slack} & ${pair[1].slack}`);
+        // Load pairings from Google Sheets
+        async function loadPairings() {
+            try {
+                const response = await fetch(SHEETS_API_URL + '?action=getPairings');
+                const data = await response.json();
+                if (data.success && data.pairings && data.pairings.length > 0) {
+                    renderPairings(data.pairings);
                 }
-            }
-
-            if (EMAILJS_PUBLIC_KEY !== 'YOUR_PUBLIC_KEY') {
-                alert('Lottery complete! Notification emails have been sent.');
+            } catch (error) {
+                console.error('Failed to load pairings:', error);
             }
         }
 
-        // Load pairings from localStorage
-        function loadPairings() {
-            const stored = localStorage.getItem(PAIRINGS_KEY);
-            if (stored) {
-                const pairings = JSON.parse(stored);
-                renderPairings(pairings);
-            }
-        }
-
-        // Clear pairings
+        // Clear pairings display (actual clearing done via clearAll)
         function clearPairings() {
-            localStorage.removeItem(PAIRINGS_KEY);
-            localStorage.removeItem(LOTTERY_RUN_KEY);
             document.getElementById('pairings-container').innerHTML = '';
         }
 
