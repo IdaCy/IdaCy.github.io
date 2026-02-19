@@ -535,12 +535,12 @@
         // PRODUCTION: Deadline is Monday 23:59 (Tuesday midnight)
         let lotteryTriggered = false;
 
-        // TESTING: Calculate deadline once at load (3 minutes from now)
-        const TEST_DEADLINE = new Date(Date.now() + 3 * 60 * 1000);
-
         function getNextDeadline() {
-            // TESTING: Return the fixed deadline
-            return TEST_DEADLINE;
+            // TESTING: Fixed time today at 17:35
+            const now = new Date();
+            const deadline = new Date(now);
+            deadline.setHours(17, 35, 0, 0);
+            return deadline;
 
             /* PRODUCTION: Next Monday 23:59
             const now = new Date();
