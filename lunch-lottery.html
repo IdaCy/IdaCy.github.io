@@ -536,6 +536,11 @@
         let lotteryTriggered = false;
 
         function getNextDeadline() {
+            // TESTING: 3 minutes from now
+            const now = new Date();
+            return new Date(now.getTime() + 3 * 60 * 1000);
+
+            /* PRODUCTION: Next Monday 23:59
             const now = new Date();
             const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, 2=Tue, etc.
 
@@ -555,6 +560,7 @@
             deadline.setHours(23, 59, 0, 0);
 
             return deadline;
+            */
         }
 
         // Advance deadline to next week (called after lottery runs)
