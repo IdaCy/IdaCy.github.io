@@ -413,35 +413,11 @@
         </div>
     </main>
 
-    <!-- EmailJS SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-
     <script>
-        // ===========================================
-        // EmailJS Configuration
-        // ===========================================
-        const EMAILJS_PUBLIC_KEY = 'PMHAuoB_yfi5gP1x5';
-        const EMAILJS_SERVICE_ID = 'service_usmfa7l';
-        const EMAILJS_TEMPLATE_ID = 'template_gy9w0n8';
-        // ===========================================
-
         // Google Sheets API (rotating two-sheet system)
-        const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbyAPaEzVwW3wjELH22MqVDLwI0HqPF3_21XkkUiW02vztxSAOijf4MovU-kSIEfB-Ld/exec';
+        // Emails are now sent via Resend from the Google Apps Script backend
+        const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycby5LlAjmUmMRU1XyJz-Wy4aka7dncEfNO8W0Eevy-Qks-0w1DwN6u1xd7P2FhXdbulP/exec';
 
-        // Lunch jokes/wordplay (add more as desired!)
-        const LUNCH_JOKES = [
-            "Why did the lunch break up with breakfast? It needed more time to ketchup!",
-            "Lettuce celebrate - it's Taco Tuesday vibes!",
-            "This pairing is sub-lime!",
-            "You've bean selected for a great lunch date!",
-            "Olive you both - have a great meal!",
-            "This is nacho average lunch pairing!",
-            "Peas enjoy your lunch together!",
-            "You're one in a melon - great pairing!",
-            "Time to taco 'bout life over lunch!",
-            "This match is a big dill!",
-            // Add more jokes here...
-        ];
 
         // Check if lottery should auto-run (deadline passed and not yet run this cycle)
         // Uses the rotating two-sheet system - no manual resets needed
@@ -524,11 +500,6 @@
 
         // Initialize - no manual resets needed with rotating two-sheet system
         document.addEventListener('DOMContentLoaded', async function() {
-            // Initialize EmailJS
-            if (EMAILJS_PUBLIC_KEY !== 'YOUR_PUBLIC_KEY') {
-                emailjs.init(EMAILJS_PUBLIC_KEY);
-            }
-
             updateNextTuesday();
 
             // Load pairings first (always shows current pairings from Google Sheets)
@@ -656,35 +627,6 @@
             updateNextTuesday();
         }
 
-        // Get random joke
-        function getRandomJoke() {
-            if (LUNCH_JOKES.length === 0) return '';
-            return LUNCH_JOKES[Math.floor(Math.random() * LUNCH_JOKES.length)];
-        }
-
-        // Send notification email
-        async function sendPairingEmail(recipient, partnerName, partnerSlack) {
-            if (EMAILJS_PUBLIC_KEY === 'YOUR_PUBLIC_KEY') {
-                console.log('EmailJS not configured - skipping email to:', recipient.email);
-                return;
-            }
-
-            const joke = getRandomJoke();
-
-            try {
-                await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-                    to_email: recipient.email,
-                    to_name: recipient.name,
-                    partner_name: partnerName,
-                    partner_slack: partnerSlack,
-                    fun: joke ? `\n${joke}` : ''
-                });
-                console.log('Email sent to:', recipient.email);
-            } catch (error) {
-                console.error('Failed to send email to:', recipient.email, error);
-            }
-        }
-
         // Get participants from Google Sheets
         async function getParticipants() {
             try {
@@ -793,19 +735,8 @@
                 const pairings = data.pairings;
                 renderPairings(pairings);
 
-                // Send notification emails
-                for (const pair of pairings) {
-                    if (pair.length === 2) {
-                        await sendPairingEmail(pair[0], pair[1].name, pair[1].slack);
-                        await sendPairingEmail(pair[1], pair[0].name, pair[0].slack);
-                    } else if (pair.length === 3) {
-                        await sendPairingEmail(pair[0], `${pair[1].name} and ${pair[2].name}`, `${pair[1].slack} & ${pair[2].slack}`);
-                        await sendPairingEmail(pair[1], `${pair[0].name} and ${pair[2].name}`, `${pair[0].slack} & ${pair[2].slack}`);
-                        await sendPairingEmail(pair[2], `${pair[0].name} and ${pair[1].name}`, `${pair[0].slack} & ${pair[1].slack}`);
-                    }
-                }
-
-                console.log('Lottery complete! Emails sent.');
+                // Emails are sent by the Google Apps Script backend via Resend
+                console.log('Lottery complete! Emails sent via backend:', data.emailsSent);
             } catch (error) {
                 console.error('Failed to run lottery:', error);
             }

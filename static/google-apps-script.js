@@ -1,5 +1,5 @@
 // ==============================================
-// LUNCH LOTTERY - ROTATING TWO-SHEET SYSTEM - SHEET 2
+// LUNCH LOTTERY - ROTATING TWO-SHEET SYSTEM
 // ==============================================
 //
 // Sheets needed in Google Spreadsheet:
@@ -13,6 +13,66 @@
 // Week 2: Signups → Sheet B → Monday lottery → Display B pairings → Clear A → Signups → Sheet A
 // (repeats)
 // ==============================================
+
+// Resend API configuration
+const RESEND_API_KEY = 're_cHrhtr6h_842nvqobQmbMgrXTuoVUzTXJ';
+const FROM_EMAIL = 'onboarding@resend.dev'; // Change to your verified domain email later
+
+// Lunch jokes for emails
+const LUNCH_JOKES = [
+  "Why did the lunch break up with breakfast? It needed more time to ketchup!",
+  "Lettuce celebrate - it's Taco Tuesday vibes!",
+  "This pairing is sub-lime!",
+  "You've bean selected for a great lunch date!",
+  "Olive you both - have a great meal!",
+  "This is nacho average lunch pairing!",
+  "Peas enjoy your lunch together!",
+  "You're one in a melon - great pairing!",
+  "Time to taco 'bout life over lunch!",
+  "This match is a big dill!"
+];
+
+// Send email via Resend API
+function sendResendEmail(toEmail, toName, partnerName, partnerSlack) {
+  const joke = LUNCH_JOKES[Math.floor(Math.random() * LUNCH_JOKES.length)];
+
+  const htmlContent = `
+    <h2>Hey ${toName}! 🍽️</h2>
+    <p>You've been paired for this week's Lunch Lottery!</p>
+    <p><strong>Your lunch partner:</strong> ${partnerName}</p>
+    <p><strong>Slack:</strong> ${partnerSlack}</p>
+    <p>Reach out to them on Slack to arrange where and when to meet!</p>
+    <p style="color: #666; font-style: italic;">${joke}</p>
+    <p>Enjoy your lunch! 🥗</p>
+  `;
+
+  const payload = {
+    from: FROM_EMAIL,
+    to: toEmail,
+    subject: '🍽️ Lunch Lottery - You\'ve been paired!',
+    html: htmlContent
+  };
+
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'Authorization': 'Bearer ' + RESEND_API_KEY
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  try {
+    const response = UrlFetchApp.fetch('https://api.resend.com/emails', options);
+    const result = JSON.parse(response.getContentText());
+    Logger.log('Email sent to ' + toEmail + ': ' + JSON.stringify(result));
+    return { success: true, result: result };
+  } catch (error) {
+    Logger.log('Failed to send email to ' + toEmail + ': ' + error);
+    return { success: false, error: error.toString() };
+  }
+}
 
 // Get or create Config sheet and return current active signup sheet
 function getActiveSheet(ss) {
@@ -287,12 +347,27 @@ function doPost(e) {
       newSheet.deleteRows(2, lastRow - 1);
     }
 
+    // Send emails via Resend
+    const emailResults = [];
+    for (let i = 0; i < pairings.length; i++) {
+      const pair = pairings[i];
+      if (pair.length === 2) {
+        emailResults.push(sendResendEmail(pair[0].email, pair[0].name, pair[1].name, pair[1].slack));
+        emailResults.push(sendResendEmail(pair[1].email, pair[1].name, pair[0].name, pair[0].slack));
+      } else if (pair.length === 3) {
+        emailResults.push(sendResendEmail(pair[0].email, pair[0].name, pair[1].name + ' and ' + pair[2].name, pair[1].slack + ' & ' + pair[2].slack));
+        emailResults.push(sendResendEmail(pair[1].email, pair[1].name, pair[0].name + ' and ' + pair[2].name, pair[0].slack + ' & ' + pair[2].slack));
+        emailResults.push(sendResendEmail(pair[2].email, pair[2].name, pair[0].name + ' and ' + pair[1].name, pair[0].slack + ' & ' + pair[1].slack));
+      }
+    }
+
     return ContentService
       .createTextOutput(JSON.stringify({
         success: true,
         pairings: pairings,
         previousSheet: activeSheetLetter,
-        newActiveSheet: newActiveSheet
+        newActiveSheet: newActiveSheet,
+        emailsSent: emailResults.length
       }))
       .setMimeType(ContentService.MimeType.JSON);
   }
