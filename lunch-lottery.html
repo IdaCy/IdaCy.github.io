@@ -536,13 +536,6 @@
         let lotteryTriggered = false;
 
         function getNextDeadline() {
-            // TESTING: Fixed time today at 09:39
-            const now = new Date();
-            const deadline = new Date(now);
-            deadline.setHours(9, 39, 0, 0);
-            return deadline;
-
-            /* PRODUCTION: Next Monday 23:59
             const now = new Date();
             const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, 2=Tue, etc.
 
@@ -562,7 +555,6 @@
             deadline.setHours(23, 59, 0, 0);
 
             return deadline;
-            */
         }
 
         // Advance deadline to next week (called after lottery runs)
@@ -625,16 +617,16 @@
                         await runLottery();
                         // runLottery already renders pairings, don't reload
                     }
-
-                    // Advance to next deadline (but keep lotteryTriggered true until next cycle)
-                    advanceDeadline();
-
-                    // After lottery, show next week message
-                    countdownEl.textContent = 'Sign up for next week!';
-                } else {
-                    // Already ran this cycle
-                    countdownEl.textContent = 'Sign up for next week!';
                 }
+
+                // After lottery, calculate next week's deadline and show countdown
+                const nextDeadline = new Date(deadline.getTime() + 7 * 24 * 60 * 60 * 1000);
+                const nextDiff = nextDeadline - now;
+                const days = Math.floor(nextDiff / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((nextDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((nextDiff % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((nextDiff % (1000 * 60)) / 1000);
+                countdownEl.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
             }
 
             // Update Tuesday date display
