@@ -416,7 +416,7 @@
     <script>
         // Google Sheets API (rotating two-sheet system)
         // Emails are now sent via Resend from the Google Apps Script backend
-        const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycby5LlAjmUmMRU1XyJz-Wy4aka7dncEfNO8W0Eevy-Qks-0w1DwN6u1xd7P2FhXdbulP/exec';
+        const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzUKblAzX8rwWEC0DLMGhh4ygApFtQ3Y7pBa75PcxQHkKXYxjvGoxkPxTduGF5-kvA6/exec';
 
 
         // Check if lottery should auto-run (deadline passed and not yet run this cycle)
@@ -536,10 +536,10 @@
         let lotteryTriggered = false;
 
         function getNextDeadline() {
-            // TESTING: Fixed time today at 17:35
+            // TESTING: Fixed time today at 20:46
             const now = new Date();
             const deadline = new Date(now);
-            deadline.setHours(17, 35, 0, 0);
+            deadline.setHours(20, 46, 0, 0);
             return deadline;
 
             /* PRODUCTION: Next Monday 23:59
@@ -629,6 +629,8 @@
                     // Advance to next deadline (but keep lotteryTriggered true until next cycle)
                     advanceDeadline();
                 }
+                // Show completion message after lottery ran
+                countdownEl.textContent = 'Lottery complete! Sign up for next week.';
             }
 
             // Update Tuesday date display

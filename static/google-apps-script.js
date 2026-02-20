@@ -16,7 +16,7 @@
 
 // Resend API configuration
 const RESEND_API_KEY = 're_cHrhtr6h_842nvqobQmbMgrXTuoVUzTXJ';
-const FROM_EMAIL = 'onboarding@resend.dev'; // Change to your verified domain email later
+const FROM_EMAIL = 'lottery@lunchlottery.org';
 
 // Lunch jokes for emails
 const LUNCH_JOKES = [
@@ -32,25 +32,81 @@ const LUNCH_JOKES = [
   "This match is a big dill!"
 ];
 
-// Send email via Resend API
+// Get next Tuesday at 12:00
+function getNextTuesday() {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  let daysUntilTuesday = (2 - dayOfWeek + 7) % 7;
+  if (daysUntilTuesday === 0) daysUntilTuesday = 7; // If today is Tuesday, get next Tuesday
+
+  const tuesday = new Date(now);
+  tuesday.setDate(now.getDate() + daysUntilTuesday);
+  tuesday.setHours(12, 0, 0, 0);
+  return tuesday;
+}
+
+// Generate .ics calendar invite content
+function generateCalendarInvite(toName, partnerName, lunchDate) {
+  const startDate = lunchDate;
+  const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1 hour later
+
+  // Format dates for ICS (YYYYMMDDTHHmmss)
+  function formatICSDate(date) {
+    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  }
+
+  const uid = 'lunch-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9) + '@lunchlottery.org';
+
+  const icsContent = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Lunch Lottery//lunchlottery.org//EN',
+    'METHOD:REQUEST',
+    'BEGIN:VEVENT',
+    'UID:' + uid,
+    'DTSTAMP:' + formatICSDate(new Date()),
+    'DTSTART:' + formatICSDate(startDate),
+    'DTEND:' + formatICSDate(endDate),
+    'SUMMARY:Lunch: ' + toName + ' & ' + partnerName,
+    'DESCRIPTION:Lunch Lottery pairing! Reach out on Slack to decide where to meet.',
+    'STATUS:CONFIRMED',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+
+  return icsContent;
+}
+
+// Send email via Resend API with calendar invite
 function sendResendEmail(toEmail, toName, partnerName, partnerSlack) {
   const joke = LUNCH_JOKES[Math.floor(Math.random() * LUNCH_JOKES.length)];
+  const lunchDate = getNextTuesday();
+  const lunchDateFormatted = lunchDate.toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
 
   const htmlContent = `
-    <h2>Hey ${toName}! 🍽️</h2>
-    <p>You've been paired for this week's Lunch Lottery!</p>
-    <p><strong>Your lunch partner:</strong> ${partnerName}</p>
-    <p><strong>Slack:</strong> ${partnerSlack}</p>
-    <p>Reach out to them on Slack to arrange where and when to meet!</p>
-    <p style="color: #666; font-style: italic;">${joke}</p>
-    <p>Enjoy your lunch! 🥗</p>
+    <p>Hi ${toName} - It's Lunch Lottery day! You're lunching with ${partnerName}. Reach out to them now: ${partnerSlack}.</p>
+    <p>Enjoy,<br>Your Lunch Lottery bot</p>
   `;
+
+  const calendarContent = generateCalendarInvite(toName, partnerName, lunchDate);
+  const calendarBase64 = Utilities.base64Encode(calendarContent);
 
   const payload = {
     from: FROM_EMAIL,
     to: toEmail,
-    subject: '🍽️ Lunch Lottery - You\'ve been paired!',
-    html: htmlContent
+    subject: "Lunch Lottery - You're paired up! " + toName + ' & ' + partnerName,
+    html: htmlContent,
+    attachments: [
+      {
+        filename: 'lunch-invite.ics',
+        content: calendarBase64
+      }
+    ]
   };
 
   const options = {
