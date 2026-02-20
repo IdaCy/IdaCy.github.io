@@ -45,14 +45,20 @@ function getNextTuesday() {
   return tuesday;
 }
 
-// Generate .ics calendar invite content
+// Generate .ics calendar invite content (PST timezone)
 function generateCalendarInvite(toName, partnerName, lunchDate) {
   const startDate = lunchDate;
   const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1 hour later
 
   // Format dates for ICS (YYYYMMDDTHHmmss)
   function formatICSDate(date) {
-    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}${month}${day}T${hours}${minutes}${seconds}`;
   }
 
   const uid = 'lunch-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9) + '@lunchlottery.org';
@@ -61,12 +67,29 @@ function generateCalendarInvite(toName, partnerName, lunchDate) {
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     'PRODID:-//Lunch Lottery//lunchlottery.org//EN',
-    'METHOD:REQUEST',
+    'METHOD:PUBLISH',
+    'BEGIN:VTIMEZONE',
+    'TZID:America/Los_Angeles',
+    'BEGIN:STANDARD',
+    'DTSTART:19701101T020000',
+    'RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU',
+    'TZOFFSETFROM:-0700',
+    'TZOFFSETTO:-0800',
+    'TZNAME:PST',
+    'END:STANDARD',
+    'BEGIN:DAYLIGHT',
+    'DTSTART:19700308T020000',
+    'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU',
+    'TZOFFSETFROM:-0800',
+    'TZOFFSETTO:-0700',
+    'TZNAME:PDT',
+    'END:DAYLIGHT',
+    'END:VTIMEZONE',
     'BEGIN:VEVENT',
     'UID:' + uid,
     'DTSTAMP:' + formatICSDate(new Date()),
-    'DTSTART:' + formatICSDate(startDate),
-    'DTEND:' + formatICSDate(endDate),
+    'DTSTART;TZID=America/Los_Angeles:' + formatICSDate(startDate),
+    'DTEND;TZID=America/Los_Angeles:' + formatICSDate(endDate),
     'SUMMARY:Lunch: ' + toName + ' & ' + partnerName,
     'DESCRIPTION:Lunch Lottery pairing! Reach out on Slack to decide where to meet.',
     'STATUS:CONFIRMED',
@@ -104,7 +127,8 @@ function sendResendEmail(toEmail, toName, partnerName, partnerSlack) {
     attachments: [
       {
         filename: 'lunch-invite.ics',
-        content: calendarBase64
+        content: calendarBase64,
+        type: 'text/calendar'
       }
     ]
   };
