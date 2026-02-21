@@ -537,9 +537,17 @@
 
         function getNextDeadline() {
             const now = new Date();
+
+            // First deadline is March 3rd, 2026 at 23:59 (skip one week)
+            const firstDeadline = new Date(2026, 2, 3, 23, 59, 0, 0); // Month is 0-indexed, so 2 = March
+
+            if (now < firstDeadline) {
+                return firstDeadline;
+            }
+
+            // After first deadline, calculate next Monday 23:59
             const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, 2=Tue, etc.
 
-            // Calculate next Monday 23:59
             let daysUntilMonday;
             if (dayOfWeek === 1) {
                 // It's Monday - if before 23:59, deadline is today; otherwise next Monday
