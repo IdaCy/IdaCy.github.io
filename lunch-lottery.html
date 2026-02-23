@@ -365,6 +365,68 @@
             color: rgb(65, 93, 74);
             font-size: 1rem;
         }
+
+        /* Modal overlay */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-box {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-box h3 {
+            color: rgb(5, 72, 27);
+            margin-bottom: 15px;
+        }
+
+        .modal-box p {
+            color: #333;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .modal-box .email-highlight {
+            background: rgb(251, 247, 217);
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-weight: 600;
+            color: rgb(5, 72, 27);
+            display: inline-block;
+            margin: 10px 0;
+        }
+
+        .modal-box .btn-ok {
+            background-color: rgb(5, 72, 27);
+            color: white;
+            padding: 12px 40px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .modal-box .btn-ok:hover {
+            background-color: rgb(65, 93, 74);
+        }
     </style>
 </head>
 <body>
@@ -394,7 +456,6 @@
                         <div class="form-fields">
                             <input type="text" id="name-input" placeholder="Enter your name" required>
                             <input type="email" id="email-input" placeholder="Your email" required>
-                            <p style="font-size: 0.85rem; color: #666; margin: -5px 0 5px 0;">Add <strong>lottery@lunchlottery.org</strong> to contacts, else the pairing email goes to spam!</p>
                             <input type="text" id="slack-input" placeholder="Your Slack @-tag" required>
                         </div>
                         <button type="submit" class="btn btn-primary">Sign Up</button>
@@ -410,6 +471,17 @@
                         <p style="color: #856404; font-style: italic;">Loading...</p>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Spam warning modal -->
+        <div class="modal-overlay" id="spam-modal">
+            <div class="modal-box">
+                <h3>You're signed up!</h3>
+                <p>To make sure your pairing email arrives, add this to your contacts:</p>
+                <div class="email-highlight">lottery@lunchlottery.org</div>
+                <p style="font-size: 0.9rem; color: #666;">Otherwise it might go to spam!</p>
+                <button class="btn-ok" onclick="closeSpamModal()">OK</button>
             </div>
         </div>
     </main>
@@ -693,10 +765,8 @@
                     emailInput.value = '';
                     slackInput.value = '';
 
-                    // Show confirmation
-                    const confirmation = document.getElementById('signup-confirmation');
-                    confirmation.textContent = `Thanks ${name}! You're signed up for the next lunch lottery.`;
-                    confirmation.style.display = 'block';
+                    // Show spam warning modal
+                    document.getElementById('spam-modal').classList.add('active');
 
                     // Don't clear pairings - they're for THIS week, new signups are for NEXT week
                 } else {
@@ -773,6 +843,11 @@
                 console.error('Failed to load pairings:', error);
                 renderPairings([]);
             }
+        }
+
+        // Close spam warning modal
+        function closeSpamModal() {
+            document.getElementById('spam-modal').classList.remove('active');
         }
 
         // Clear pairings display and show empty state
