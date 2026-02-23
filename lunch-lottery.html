@@ -611,8 +611,8 @@
         function getNextDeadline() {
             const now = new Date();
 
-            // First deadline is March 3rd, 2026 at 23:59 (skip one week)
-            const firstDeadline = new Date(2026, 2, 3, 23, 59, 0, 0); // Month is 0-indexed, so 2 = March
+            // First deadline is March 2nd, 2026 at 23:59 (Monday before first Tuesday lunch)
+            const firstDeadline = new Date(2026, 2, 2, 23, 59, 0, 0); // Month is 0-indexed, so 2 = March
 
             if (now < firstDeadline) {
                 return firstDeadline;
