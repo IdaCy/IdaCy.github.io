@@ -259,6 +259,10 @@ textarea {
   gap: 10px;
 }
 
+.hero-actions {
+  align-items: center;
+}
+
 .pill,
 .chip {
   display: inline-flex;
@@ -303,6 +307,12 @@ textarea {
   gap: 14px;
 }
 
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .stat-card {
   padding: 16px;
   border-radius: var(--radius-md);
@@ -332,6 +342,24 @@ textarea {
 
 .callout strong {
   color: var(--ink);
+}
+
+.info-card {
+  padding: 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: rgba(255, 250, 243, 0.88);
+}
+
+.info-card h3 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.info-card p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.55;
 }
 
 .benchmark-controls,
@@ -500,6 +528,15 @@ textarea {
   margin: 0;
   color: var(--ink-soft);
   line-height: 1.5;
+}
+
+.benchmark-card--public,
+.feature-grid .benchmark-card {
+  height: 100%;
+}
+
+.benchmark-card__note {
+  margin-top: 14px !important;
 }
 
 .meta-grid {
@@ -780,6 +817,7 @@ textarea {
 
   .benchmark-controls,
   .stat-grid,
+  .feature-grid,
   .task-meta,
   .meta-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -810,6 +848,7 @@ textarea {
   .benchmark-controls,
   .form-grid,
   .stat-grid,
+  .feature-grid,
   .task-meta,
   .meta-grid {
     grid-template-columns: 1fr;

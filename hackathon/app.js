@@ -212,43 +212,193 @@ function getFilteredCatalog() {
   });
 }
 
+function prettifyLabel(value) {
+  return String(value ?? "")
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      if (/^[A-Z0-9+/]+$/.test(word)) {
+        return word;
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(" ");
+}
+
+function formatBenchmarkTitle(benchmark) {
+  const raw = String(benchmark?.title || benchmark?.id || "").trim();
+  if (!raw) {
+    return "Untitled Benchmark";
+  }
+  if (raw === benchmark?.id || /^[a-z0-9_/-]+$/.test(raw)) {
+    return prettifyLabel(raw);
+  }
+  return raw;
+}
+
+function describeAccess(benchmark) {
+  return benchmark.visibility === "private" ? "invite-only" : "public";
+}
+
+function describeGrading(benchmark) {
+  switch (benchmark.gradingMode) {
+    case "instant_exact":
+      return "instant scoring";
+    case "score_only":
+      return "review score";
+    case "async_llm":
+      return "judge-reviewed";
+    case "execution_like":
+      return "custom checker";
+    case "agentic_external_env":
+      return "external environment";
+    default:
+      return "scored after submission";
+  }
+}
+
+function getEstimatedOnlyBenchmarks() {
+  return state.catalog.filter((item) => item.baselineStatus === "estimated_only");
+}
+
+function getCalibrationBenchmarks() {
+  return state.catalog.filter((item) => item.baselineStatus === "has_real");
+}
+
+function getOpeningBenchmarks() {
+  return getEstimatedOnlyBenchmarks()
+    .filter((item) => ["launch", "sample_first"].includes(item.priority))
+    .slice(0, 8);
+}
+
+function getLaterBenchmarks() {
+  return getEstimatedOnlyBenchmarks()
+    .filter((item) => ["follow_up", "special_case"].includes(item.priority))
+    .slice(0, 4);
+}
+
+function getTeamBenchmarks() {
+  return state.catalog.filter((item) =>
+    String(item.contributor || "").toLowerCase().includes("ifc24")
+  );
+}
+
+function sumItemCount(benchmarks) {
+  return benchmarks.reduce((sum, item) => sum + Number(item.itemCount || 0), 0);
+}
+
+function sumEstimatedHours(benchmarks) {
+  return benchmarks.reduce((sum, item) => {
+    return sum + (Number.isFinite(item.totalEstimatedHours) ? Number(item.totalEstimatedHours) : 0);
+  }, 0);
+}
+
+function renderInfoCard(title, text) {
+  return `
+    <article class="info-card">
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+    </article>
+  `;
+}
+
+function renderPoolBenchmarkCard(benchmark) {
+  return `
+    <article class="benchmark-card benchmark-card--public">
+      <div class="benchmark-card__header">
+        <div>
+          <h3>${escapeHtml(formatBenchmarkTitle(benchmark))}</h3>
+          <p>${escapeHtml(benchmark.description)}</p>
+        </div>
+        <div class="chip-row">
+          ${renderChip(describeAccess(benchmark), benchmark.visibility === "private" ? "warning" : "success")}
+          ${renderChip(describeGrading(benchmark), "accent")}
+        </div>
+      </div>
+
+      <div class="pill-row">
+        ${renderChip(prettifyLabel(benchmark.domain))}
+        ${renderChip(`${formatNumber(benchmark.itemCount)} items`)}
+        ${renderChip(formatMinutesRange(benchmark.estimatedRange))}
+      </div>
+
+      <div class="meta-grid">
+        <div class="meta-grid__cell">
+          <span class="meta-grid__label">From</span>
+          <span class="meta-grid__value">${escapeHtml(benchmark.contributor)}</span>
+        </div>
+        <div class="meta-grid__cell">
+          <span class="meta-grid__label">Pool Size</span>
+          <span class="meta-grid__value">${formatNumber(benchmark.itemCount)}</span>
+        </div>
+        <div class="meta-grid__cell">
+          <span class="meta-grid__label">Typical Time</span>
+          <span class="meta-grid__value">${formatMinutesRange(benchmark.estimatedRange)}</span>
+        </div>
+        <div class="meta-grid__cell">
+          <span class="meta-grid__label">Full Pass</span>
+          <span class="meta-grid__value">${benchmark.totalEstimatedHours == null ? "reference set" : formatHours(benchmark.totalEstimatedHours)}</span>
+        </div>
+      </div>
+
+      <p class="benchmark-card__note">${escapeHtml(benchmark.notes)}</p>
+    </article>
+  `;
+}
+
+function renderTrackCard(track) {
+  const trackBenchmarks = track.benchmarkIds.map(getBenchmarkById).filter(Boolean);
+  const inviteOnly = trackBenchmarks.some((item) => item.visibility === "private");
+
+  return `
+    <article class="info-card">
+      <div class="chip-row" style="margin-bottom: 10px;">
+        ${renderChip(`${trackBenchmarks.length} benchmark families`, "muted")}
+        ${renderChip(inviteOnly ? "invite-only items included" : "public track", inviteOnly ? "warning" : "success")}
+      </div>
+      <h3>${escapeHtml(track.title)}</h3>
+      <p>${escapeHtml(track.description)}</p>
+    </article>
+  `;
+}
+
 function renderHeroSection() {
-  const currentTrack = getTrackById(state.selectedTrackId);
-  const focusedBenchmark = getBenchmarkById(state.preferredBenchmarkId);
-  const accessStage = getAccessStage();
-  const heroStatusText =
-    isPublicPreview()
-      ? appConfig.release.previewMessage
-      : provider.mode === "mock"
-      ? "Mock solve flow active; backend still required for private tracks and shared stats"
-      : accessStage === "auth_required"
-      ? "Sign in with a magic link to access the live event"
-      : accessStage === "registration_required"
-      ? "Authenticated; event registration still required"
-      : "Backend-connected event mode";
+  const estimatedOnly = getEstimatedOnlyBenchmarks();
+  const openingBenchmarks = getOpeningBenchmarks();
+  const heroStatusText = isPublicPreview()
+    ? "Public preview is live. Tasks and submission links will appear on this page when the event opens."
+    : "The event is open. Tasks and submission links are available below.";
 
   return `
     <section class="hero-panel">
       <div class="hero-panel__intro">
-        <p class="eyebrow">Human Baselines In Progress</p>
+        <p class="eyebrow">${escapeHtml(appConfig.event.name)}</p>
         <h1>Time Horizons Hackathon</h1>
         <p class="hero-copy">
-          This subpage is the operational front-end for collecting human solve-time
-          baselines on benchmarks that currently only have estimated horizons.
+          Help build human baselines for benchmark families in the Time Horizons suite.
+          Participants will work through selected tasks, submit answers and timing,
+          and help turn estimated horizons into measured ones.
         </p>
+        <div class="inline-actions hero-actions" style="margin-top: 22px;">
+          <a class="btn btn--primary" href="${isPublicPreview() ? "#format" : "#solve"}">${isPublicPreview() ? "How It Works" : "Go To Tasks"}</a>
+          <a class="btn btn--secondary" href="#benchmarks">Challenge Pool</a>
+        </div>
         <div class="pill-row" style="margin-top: 18px;">
-          ${renderChip(`Track: ${currentTrack?.title || "n/a"}`, "accent")}
-          ${focusedBenchmark ? renderChip(`Queue focus: ${focusedBenchmark.title}`, "success") : renderChip("Queue focus: auto-allocation", "muted")}
+          ${renderChip(`${formatNumber(openingBenchmarks.length)} opening families`, "accent")}
+          ${renderChip(`${formatNumber(sumItemCount(estimatedOnly))} items in the current pool`, "success")}
+          ${renderChip(`${formatHours(sumEstimatedHours(estimatedOnly))} total estimated human time`, "muted")}
         </div>
       </div>
       <div class="hero-panel__status">
         <div class="metric-tile">
-          <span class="metric-tile__label">Frontend mode</span>
-          <strong id="hero-backend-mode">${escapeHtml(provider.mode.toUpperCase())}</strong>
+          <span class="metric-tile__label">Event</span>
+          <strong id="hero-event-name">${escapeHtml(appConfig.event.name)}</strong>
         </div>
         <div class="metric-tile">
-          <span class="metric-tile__label">Current event</span>
-          <strong id="hero-event-name">${escapeHtml(appConfig.event.name)}</strong>
+          <span class="metric-tile__label">Current Pool</span>
+          <strong>${formatNumber(estimatedOnly.length)} benchmark families still need measured baselines</strong>
         </div>
         <div class="metric-tile metric-tile--accent">
           <span class="metric-tile__label">Status</span>
@@ -260,98 +410,73 @@ function renderHeroSection() {
 }
 
 function renderOverviewSection() {
-  const accessStage = getAccessStage();
-  const visibleCatalog = state.catalog;
-  const exactLaunchBenchmarks = state.catalog.filter((item) =>
-    ["launch", "sample_first"].includes(item.priority)
-  );
-
-  const publicEstimatedOnly = state.catalog.filter(
-    (item) => item.baselineStatus === "estimated_only" && item.visibility === "public"
-  );
+  const estimatedOnly = getEstimatedOnlyBenchmarks();
+  const calibration = getCalibrationBenchmarks();
+  const teamBenchmarks = getTeamBenchmarks();
 
   return `
     <section id="overview" class="section-grid">
       <article class="surface-card">
         <div class="surface-card__header">
           <div>
-            <p class="surface-card__eyebrow">Scope</p>
-            <h2>What this app is handling</h2>
+            <p class="surface-card__eyebrow">About</p>
+            <h2>Why this hackathon exists</h2>
             <p>
-              Static subpage frontend, mock-mode demo queue, real benchmark catalog,
-              and explicit placeholders for private delivery, async grading, and shared
-              event stats.
+              Time Horizons collects task families meant to measure how difficult tasks are for
+              humans and models. Many of those families already have estimated human times, but
+              not measured baselines. This event is for filling that gap.
             </p>
-          </div>
-          <div class="pill-row">
-            ${renderChip(`Mode: ${provider.mode}`, provider.mode === "mock" ? "warning" : "success")}
-            ${renderChip("Frontend live", "success")}
-            ${renderChip("Backend placeholders wired", "accent")}
           </div>
         </div>
 
         <div class="stat-grid">
           <article class="stat-card">
-            <p class="stat-card__value">${visibleCatalog.filter((item) => item.baselineStatus === "estimated_only").length}</p>
-            <p class="stat-card__label">Benchmarks without real baselines</p>
+            <p class="stat-card__value">${formatNumber(estimatedOnly.length)}</p>
+            <p class="stat-card__label">Benchmark families still needing human baselines</p>
           </article>
           <article class="stat-card">
-            <p class="stat-card__value">${visibleCatalog.filter((item) => item.baselineStatus === "has_real").length}</p>
-            <p class="stat-card__label">Benchmarks already carrying real baselines</p>
+            <p class="stat-card__value">${formatNumber(sumItemCount(estimatedOnly))}</p>
+            <p class="stat-card__label">Items in the current pool</p>
           </article>
           <article class="stat-card">
-            <p class="stat-card__value">${visibleCatalog.filter((item) => item.baselineStatus === "estimated_only" && item.visibility === "private").length}</p>
-            <p class="stat-card__label">Estimated-only private tracks</p>
+            <p class="stat-card__value">${formatHours(sumEstimatedHours(estimatedOnly))}</p>
+            <p class="stat-card__label">Estimated human time across the no-baseline pool</p>
           </article>
           <article class="stat-card">
-            <p class="stat-card__value">${formatNumber(publicEstimatedOnly.reduce((sum, item) => sum + item.itemCount, 0))}</p>
-            <p class="stat-card__label">Public estimated-only items listed here</p>
+            <p class="stat-card__value">${formatNumber(calibration.length)}</p>
+            <p class="stat-card__label">Reference sets that already have human baselines</p>
           </article>
         </div>
 
         <div class="callout" style="margin-top: 18px;">
-          ${isPublicPreview() ? `
-            <strong>Public preview:</strong>
-            this page is currently in information-only mode. Solve, live stats, and admin sections
-            stay hidden until the launch switch is flipped.
-          ` : provider.mode === "mock" ? `
-            <strong>Important:</strong>
-            current mock mode is only a frontend stand-in. It cannot serve
-            <code>monitor_training_poisoning</code> or synchronize real multi-user stats.
-            The solve queue therefore demonstrates the workflow with public demo imports and a
-            private-task placeholder.
-          ` : accessStage === "auth_required" ? `
-            <strong>Private data stays off the public site.</strong>
-            In API mode the frontend only becomes usable after participant sign-in and registration.
-            Assigned tasks are delivered one at a time by the backend.
-          ` : `
-            <strong>Live privacy model:</strong>
-            catalog, assignments, and stats are served through the backend; private task payloads
-            are not bundled into the static site.
-          `}
+          <strong>${isPublicPreview() ? "This page is already the public event page." : "The event page is live."}</strong>
+          ${isPublicPreview()
+            ? " The only thing still held back is the task and submission flow, which will open in the tasks section below."
+            : " Tasks, submissions, and progress updates are now part of the same page."}
         </div>
       </article>
 
       <aside class="surface-card">
         <div class="surface-card__header">
           <div>
-            <p class="surface-card__eyebrow">Launch shape</p>
-            <h2>Recommended first-event mix</h2>
+            <p class="surface-card__eyebrow">Our Contributions</p>
+            <h2>Benchmarks we added</h2>
           </div>
         </div>
         <div class="coverage-list">
-          ${exactLaunchBenchmarks.slice(0, 6).map((benchmark) => `
+          ${teamBenchmarks.map((benchmark) => `
             <article class="coverage-card">
               <div class="coverage-card__header">
                 <div>
-                  <h3>${escapeHtml(benchmark.title)}</h3>
-                  <p>${escapeHtml(benchmark.notes)}</p>
+                  <h3>${escapeHtml(formatBenchmarkTitle(benchmark))}</h3>
+                  <p>${escapeHtml(benchmark.description)}</p>
                 </div>
                 <div class="chip-row">
-                  ${renderChip(benchmark.priority.replaceAll("_", " "), benchmark.priority === "launch" ? "success" : "accent")}
-                  ${renderChip(`${benchmark.itemCount} items`, "muted")}
+                  ${renderChip(benchmark.baselineStatus === "has_real" ? "already grounded" : "opening target", benchmark.baselineStatus === "has_real" ? "success" : "accent")}
+                  ${renderChip(benchmark.visibility === "private" ? "invite-only" : "public", benchmark.visibility === "private" ? "warning" : "muted")}
                 </div>
               </div>
+              <p class="muted-text">${escapeHtml(benchmark.notes)}</p>
             </article>
           `).join("")}
         </div>
@@ -360,143 +485,149 @@ function renderOverviewSection() {
   `;
 }
 
-function renderBenchmarkCard(benchmark) {
-  const canDirectQueue =
-    !isPublicPreview() &&
-    benchmark.frontendMode === "direct" &&
-    benchmark.baselineStatus === "estimated_only" &&
-    benchmark.visibility === "public";
-  const isFocused = state.preferredBenchmarkId === benchmark.id;
-
+function renderFormatSection() {
   return `
-    <article class="benchmark-card" data-benchmark-id="${escapeHtml(benchmark.id)}">
-      <div class="benchmark-card__header">
-        <div>
-          <h3>${escapeHtml(benchmark.title)}</h3>
-          <p>${escapeHtml(benchmark.description)}</p>
+    <section id="format" class="section-grid">
+      <article class="surface-card">
+        <div class="surface-card__header">
+          <div>
+            <p class="surface-card__eyebrow">How It Works</p>
+            <h2>What participants will do</h2>
+            <p>
+              The event is browser-based. Once tasks open, participants pick a track, solve assigned
+              items, and submit answers and timing through this page.
+            </p>
+          </div>
         </div>
-        <div class="chip-row">
-          ${renderChip(benchmark.baselineStatus === "estimated_only" ? "needs real baseline" : "has real baseline", benchmark.baselineStatus === "estimated_only" ? "warning" : "success")}
-          ${renderChip(benchmark.visibility, benchmark.visibility === "private" ? "warning" : "muted")}
-          ${renderChip(benchmark.priority.replaceAll("_", " "), "accent")}
-        </div>
-      </div>
 
-      <div class="pill-row">
-        ${renderChip(benchmark.domain)}
-        ${renderChip(`scorer: ${benchmark.scorer}`)}
-        ${renderChip(`frontend: ${benchmark.frontendMode}`)}
-        ${renderChip(`grading: ${benchmark.gradingMode}`)}
-      </div>
+        <div class="feature-grid">
+          ${renderInfoCard(
+            "Read the pool",
+            "Use this page to see the benchmark families, what kind of tasks they contain, and which tracks are opening first."
+          )}
+          ${renderInfoCard(
+            "Join a track",
+            "When the event opens, the tasks section will unlock and participants will be able to start solving items here."
+          )}
+          ${renderInfoCard(
+            "Submit answers",
+            "Answers, timing, and progress updates will all live on the same page once the event starts."
+          )}
+        </div>
 
-      <div class="meta-grid">
-        <div class="meta-grid__cell">
-          <span class="meta-grid__label">Contributor</span>
-          <span class="meta-grid__value">${escapeHtml(benchmark.contributor)}</span>
+        <div class="callout" style="margin-top: 18px;">
+          <strong>${isPublicPreview() ? "Before launch" : "During the event"}</strong>
+          ${isPublicPreview()
+            ? " This page is already public. The tasks section is the only part still waiting for launch."
+            : " Tasks are open below, and the challenge-pool overview stays available for reference."}
         </div>
-        <div class="meta-grid__cell">
-          <span class="meta-grid__label">Items</span>
-          <span class="meta-grid__value">${formatNumber(benchmark.itemCount)}</span>
-        </div>
-        <div class="meta-grid__cell">
-          <span class="meta-grid__label">Estimated range</span>
-          <span class="meta-grid__value">${formatMinutesRange(benchmark.estimatedRange)}</span>
-        </div>
-        <div class="meta-grid__cell">
-          <span class="meta-grid__label">1x coverage</span>
-          <span class="meta-grid__value">${benchmark.totalEstimatedHours == null ? "n/a" : formatHours(benchmark.totalEstimatedHours)}</span>
-        </div>
-      </div>
+      </article>
 
-      <div class="inline-actions" style="margin-top: 16px;">
-        ${canDirectQueue ? `
-          <button class="btn btn--secondary" type="button" data-action="queue-benchmark" data-benchmark-id="${escapeHtml(benchmark.id)}">
-            ${isFocused ? "Focused In Queue" : "Focus In Queue"}
-          </button>
-        ` : `
-          <span class="muted-text">This benchmark is listed for planning, but not fully imported into mock solve mode.</span>
-        `}
-      </div>
-    </article>
+      <aside class="surface-card">
+        <div class="surface-card__header">
+          <div>
+            <p class="surface-card__eyebrow">Tracks</p>
+            <h2>Opening tracks</h2>
+          </div>
+        </div>
+        <div class="feature-grid">
+          ${state.tracks.map(renderTrackCard).join("")}
+        </div>
+      </aside>
+    </section>
   `;
 }
 
 function renderBenchmarksSection() {
-  const accessStage = getAccessStage();
-  if (!isPublicPreview() && provider.mode === "api" && accessStage !== "ready") {
-    return `
-      <section id="benchmarks" class="surface-card">
-        <div class="empty-state">
-          <h3>Benchmark browser locked</h3>
-          <p>${accessStage === "auth_required" ? "Sign in first to load the live event catalog." : accessStage === "registration_required" ? "Complete event registration to load benchmark access." : "Preparing authenticated session."}</p>
-        </div>
-      </section>
-    `;
-  }
-
-  const filtered = getFilteredCatalog();
-  const domains = Array.from(new Set(state.catalog.map((item) => item.domain))).sort();
-  const priorities = Array.from(new Set(state.catalog.map((item) => item.priority))).sort();
+  const openingBenchmarks = getOpeningBenchmarks();
+  const calibrationBenchmarks = getCalibrationBenchmarks();
+  const laterBenchmarks = getLaterBenchmarks();
 
   return `
     <section id="benchmarks" class="surface-card">
       <div class="surface-card__header">
         <div>
-          <p class="surface-card__eyebrow">Benchmark Browser</p>
-          <h2>Target pool for human-baseline collection</h2>
+          <p class="surface-card__eyebrow">Challenge Pool</p>
+          <h2>Opening benchmark families</h2>
           <p>
-            Catalog is seeded from the current submitted task definitions and filtered toward
-            the estimated-only benchmarks that need hackathon attention.
-            ${isPublicPreview() ? " This preview lists the target pool only; assignment and answer flow stay locked." : ""}
+            The first release focuses on short and medium-sized benchmark families that are a good fit
+            for a first pass at human baselines, plus one invite-only contribution track.
           </p>
         </div>
-        <div class="pill-row">
-          ${renderChip(`${filtered.length} visible`, "success")}
-          ${renderChip(`${state.catalog.filter((item) => item.baselineStatus === "estimated_only").length} no-baseline tasks`, "warning")}
+        <div class="chip-row">
+          ${renderChip(`${formatNumber(openingBenchmarks.length)} opening families`, "success")}
+          ${renderChip(`${formatNumber(state.catalog.length)} total families in the current catalog`, "muted")}
         </div>
       </div>
 
-      <div class="benchmark-controls">
-        <div class="field">
-          <label for="filter-query">Search</label>
-          <input id="filter-query" name="filter-query" type="text" value="${escapeHtml(state.filters.query)}" placeholder="task, scorer, contributor">
+      <div class="feature-grid">
+        ${openingBenchmarks.map(renderPoolBenchmarkCard).join("")}
+      </div>
+
+      <div class="callout" style="margin-top: 18px;">
+        <strong>More is coming after the first pass.</strong>
+        The full pool is larger than the opening set, so the first release emphasizes coverage on the most practical tracks before expanding further.
+      </div>
+    </section>
+
+    <section class="section-grid">
+      <article class="surface-card">
+        <div class="surface-card__header">
+          <div>
+            <p class="surface-card__eyebrow">Reference Sets</p>
+            <h2>Benchmarks that already have human baselines</h2>
+            <p>
+              These are useful anchors for calibration and comparison while the new no-baseline families are being filled in.
+            </p>
+          </div>
         </div>
-        <div class="field">
-          <label for="filter-domain">Domain</label>
-          <select id="filter-domain" name="filter-domain">
-            <option value="all"${state.filters.domain === "all" ? " selected" : ""}>All domains</option>
-            ${domains.map((domain) => `<option value="${escapeHtml(domain)}"${state.filters.domain === domain ? " selected" : ""}>${escapeHtml(domain)}</option>`).join("")}
-          </select>
+        <div class="feature-grid">
+          ${calibrationBenchmarks.map(renderPoolBenchmarkCard).join("")}
         </div>
-        <div class="field">
-          <label for="filter-baseline">Baseline status</label>
-          <select id="filter-baseline" name="filter-baseline">
-            <option value="all"${state.filters.baseline === "all" ? " selected" : ""}>All</option>
-            <option value="estimated_only"${state.filters.baseline === "estimated_only" ? " selected" : ""}>Needs real baseline</option>
-            <option value="has_real"${state.filters.baseline === "has_real" ? " selected" : ""}>Already has real baseline</option>
-          </select>
+      </article>
+
+      <aside class="surface-card">
+        <div class="surface-card__header">
+          <div>
+            <p class="surface-card__eyebrow">Later Waves</p>
+            <h2>Families planned after launch</h2>
+          </div>
         </div>
-        <div class="field">
-          <label for="filter-visibility">Visibility</label>
-          <select id="filter-visibility" name="filter-visibility">
-            <option value="all"${state.filters.visibility === "all" ? " selected" : ""}>All</option>
-            <option value="public"${state.filters.visibility === "public" ? " selected" : ""}>Public</option>
-            <option value="private"${state.filters.visibility === "private" ? " selected" : ""}>Private</option>
-          </select>
+        <div class="feature-grid">
+          ${laterBenchmarks.map(renderPoolBenchmarkCard).join("")}
         </div>
-        <div class="field">
-          <label for="filter-priority">Priority</label>
-          <select id="filter-priority" name="filter-priority">
-            <option value="all"${state.filters.priority === "all" ? " selected" : ""}>All priorities</option>
-            ${priorities.map((priority) => `<option value="${escapeHtml(priority)}"${state.filters.priority === priority ? " selected" : ""}>${escapeHtml(priority.replaceAll("_", " "))}</option>`).join("")}
-          </select>
+      </aside>
+    </section>
+  `;
+}
+
+function renderFaqSection() {
+  return `
+    <section id="faq" class="surface-card">
+      <div class="surface-card__header">
+        <div>
+          <p class="surface-card__eyebrow">FAQ</p>
+          <h2>${isPublicPreview() ? "Before the event opens" : "Event basics"}</h2>
         </div>
       </div>
 
-      <div class="benchmark-list" style="margin-top: 20px;">
-        ${filtered.map(renderBenchmarkCard).join("") || `
-          <div class="empty-state">No benchmarks match the current filters.</div>
-        `}
+      <div class="feature-grid">
+        ${renderInfoCard(
+          "What is visible right now?",
+          "This public page, the event outline, and the challenge pool. The task and submission flow will appear here when the event opens."
+        )}
+        ${renderInfoCard(
+          "Will every task be public?",
+          "No. Some tracks are public, while invite-only tracks are shown here only at a high level and are delivered to registered participants during the event."
+        )}
+        ${renderInfoCard(
+          "How are answers scored?",
+          "Some tracks have immediate exact scoring, some use review scores, and some need judged grading after submission."
+        )}
+        ${renderInfoCard(
+          "Do I need to install anything?",
+          "No. The event is designed to run in the browser."
+        )}
       </div>
     </section>
   `;
@@ -622,10 +753,9 @@ function renderParticipantPanel() {
         <div class="surface-card__header">
           <div>
             <p class="surface-card__eyebrow">Participant</p>
-            <h3>Create local profile</h3>
+            <h3>Create your profile</h3>
             <p>
-              In mock mode this stays in browser storage. In API mode this should be replaced by
-              magic-link auth plus event registration.
+              Add your details here so the task flow can keep track of your submissions once the event opens.
             </p>
           </div>
         </div>
@@ -647,7 +777,7 @@ function renderParticipantPanel() {
             <input id="participant-affiliation" name="affiliation" type="text" placeholder="Imperial College London">
           </div>
           <div class="inline-actions" style="grid-column: 1 / -1;">
-            <button class="btn btn--primary" type="submit">Save Local Profile</button>
+            <button class="btn btn--primary" type="submit">Save Profile</button>
           </div>
         </form>
       </article>
@@ -664,7 +794,7 @@ function renderParticipantPanel() {
         </div>
         <div class="chip-row">
           ${renderChip(state.participant.team || "no team", "accent")}
-          ${renderChip(state.participant.affiliation || "local profile", "muted")}
+          ${renderChip(state.participant.affiliation || "participant", "muted")}
         </div>
       </div>
       <div class="inline-actions">
@@ -721,11 +851,10 @@ function renderSolveSidebar() {
       <article class="surface-card">
         <div class="surface-card__header">
           <div>
-            <p class="surface-card__eyebrow">Queue</p>
-            <h3>Claim the next task</h3>
+            <p class="surface-card__eyebrow">Tasks</p>
+            <h3>Start with the next assignment</h3>
             <p>
-              This queue is seeded with demo imports and placeholders. The real backend should
-              allocate one task at a time and track shared coverage centrally.
+              Choose a track, claim the next available item, and work through it here.
             </p>
           </div>
         </div>
@@ -748,8 +877,8 @@ function renderSolveSidebar() {
 
         ${focusedBenchmark ? `
           <div class="callout" style="margin-top: 14px;">
-            <strong>Queue focus</strong><br>
-            ${escapeHtml(focusedBenchmark.title)} is currently prioritized when a matching mock task exists in this track.
+            <strong>Current priority</strong><br>
+            ${escapeHtml(formatBenchmarkTitle(focusedBenchmark))} will be chosen first when there is a matching item available.
           </div>
         ` : ""}
 
@@ -765,8 +894,8 @@ function renderSolveSidebar() {
         ${isBlockedTrack ? `
           <div class="status-banner" data-tone="warning" style="margin-top: 14px;">
             <div>
-              <strong>Backend required for this track</strong>
-              <p>Private or signed-payload delivery is not available in mock mode.</p>
+              <strong>Invite-only track</strong>
+              <p>This track opens once protected task delivery is enabled for registered participants.</p>
             </div>
           </div>
         ` : ""}
@@ -779,12 +908,12 @@ function renderSolveSidebar() {
             <h3>Recent work</h3>
           </div>
           <div class="chip-row">
-            ${renderChip(`${state.mySubmissions.length} stored locally`, "success")}
+            ${renderChip(`${state.mySubmissions.length} submissions`, "success")}
           </div>
         </div>
         <div class="submission-list">
           ${state.mySubmissions.slice(0, 4).map(renderMySubmissionCard).join("") || `
-            <div class="empty-state">No submissions yet in this browser profile.</div>
+            <div class="empty-state">No submissions yet.</div>
           `}
         </div>
       </article>
@@ -960,9 +1089,7 @@ function renderSolveMainPanel() {
           <div class="timer-panel__value" id="assignment-timer">00:00</div>
         </div>
         <div class="helper-text">
-          ${provider.mode === "mock"
-            ? "Mock mode records wall-clock time. Real mode should replace this with active heartbeat-based timing."
-            : "Live mode currently records client-side elapsed time. The backend schema is prepared for heartbeat-based active timing."}
+          Solve time starts when you claim the task and is submitted together with your answer.
         </div>
       </div>
 
@@ -973,8 +1100,8 @@ function renderSolveMainPanel() {
       ${isBlocked ? `
         <div class="status-banner" data-tone="warning">
           <div>
-            <strong>Placeholder only</strong>
-            <p>This assignment demonstrates the protected-task rendering slot but cannot be solved from static mode.</p>
+            <strong>Invite-only item</strong>
+            <p>This task stays locked until protected delivery is enabled for registered participants.</p>
           </div>
         </div>
       ` : `
@@ -995,11 +1122,10 @@ function renderSolveSection() {
     <section id="solve" class="surface-card">
       <div class="surface-card__header">
         <div>
-          <p class="surface-card__eyebrow">Solve</p>
-          <h2>Assignment queue and submission flow</h2>
+          <p class="surface-card__eyebrow">Tasks</p>
+          <h2>Task and submission area</h2>
           <p>
-            This flow is already usable in mock mode. When the backend is available, the same UI
-            should claim one assignment at a time, fetch private payloads, and write live stats to the shared store.
+            Use this section to claim assignments, work through them, and submit answers during the event.
           </p>
         </div>
       </div>
@@ -1023,14 +1149,14 @@ function renderSolveSection() {
 
 function renderPreviewLockedSection() {
   return `
-    <section class="surface-card">
+    <section id="solve" class="surface-card">
       <div class="surface-card__header">
         <div>
-          <p class="surface-card__eyebrow">Access</p>
-          <h2>Interactive views stay locked until launch</h2>
+          <p class="surface-card__eyebrow">Tasks</p>
+          <h2>Tasks open here on launch day</h2>
           <p>
-            This public preview is intended to explain the event and benchmark scope without exposing
-            the solve workflow or event operations before release.
+            The public page is already live. When the event opens, this section will switch from an
+            overview to the actual task and submission flow.
           </p>
         </div>
       </div>
@@ -1039,62 +1165,46 @@ function renderPreviewLockedSection() {
         <article class="surface-card">
           <div class="surface-card__header">
             <div>
-              <p class="surface-card__eyebrow">Hidden For Now</p>
-              <h3>Not rendered in preview mode</h3>
+              <p class="surface-card__eyebrow">At Launch</p>
+              <h3>What will appear here</h3>
             </div>
           </div>
-          <div class="benchmark-list">
-            <article class="benchmark-card">
-              <div class="benchmark-card__header">
-                <div>
-                  <h3>Assignment queue and task pages</h3>
-                  <p>Participants cannot claim tasks or see benchmark items until the site is switched out of preview mode.</p>
-                </div>
-              </div>
-            </article>
-            <article class="benchmark-card">
-              <div class="benchmark-card__header">
-                <div>
-                  <h3>Live event stats</h3>
-                  <p>Coverage, leaderboard, and submission totals stay private until the backend-backed event is live.</p>
-                </div>
-              </div>
-            </article>
-            <article class="benchmark-card">
-              <div class="benchmark-card__header">
-                <div>
-                  <h3>Admin controls</h3>
-                  <p>Configuration placeholders, exports, and reset controls are hidden from the public preview.</p>
-                </div>
-              </div>
-            </article>
+          <div class="feature-grid">
+            ${renderInfoCard(
+              "Assigned tasks",
+              "Participants will be able to claim the next available item in their chosen track directly from this page."
+            )}
+            ${renderInfoCard(
+              "Submission forms",
+              "Each task page will include the answer field and submission link needed for that benchmark family."
+            )}
+            ${renderInfoCard(
+              "Progress updates",
+              "Coverage and event progress will be shown here during the hackathon."
+            )}
           </div>
         </article>
 
         <article class="surface-card">
           <div class="surface-card__header">
             <div>
-              <p class="surface-card__eyebrow">Launch Switch</p>
-              <h3>What changes at release</h3>
+              <p class="surface-card__eyebrow">Right Now</p>
+              <h3>What you can already do</h3>
             </div>
           </div>
-          <div class="benchmark-list">
-            <article class="benchmark-card">
-              <div class="benchmark-card__header">
-                <div>
-                  <h3>Frontend</h3>
-                  <p>Set <code>release.stage</code> in <code>hackathon/config.js</code> away from <code>public_preview</code>.</p>
-                </div>
-              </div>
-            </article>
-            <article class="benchmark-card">
-              <div class="benchmark-card__header">
-                <div>
-                  <h3>Backend</h3>
-                  <p>Point the frontend at the deployed API and keep private tasks served one assignment at a time after auth.</p>
-                </div>
-              </div>
-            </article>
+          <div class="feature-grid">
+            ${renderInfoCard(
+              "Read the format",
+              "Use the sections above to see how the event works and which tracks are planned for the opening release."
+            )}
+            ${renderInfoCard(
+              "Browse the pool",
+              "The opening benchmark families and reference sets are already listed on this page."
+            )}
+            ${renderInfoCard(
+              "Come back here for launch",
+              "The tasks section will unlock in place, so this stays the same event page before and after the opening."
+            )}
           </div>
         </article>
       </div>
@@ -1135,19 +1245,15 @@ function renderLiveStatsSection() {
           <p class="surface-card__eyebrow">Live Stats</p>
           <h2>Event dashboard</h2>
           <p>
-            In mock mode these are local-browser aggregates. API mode should replace this with
-            shared event metrics and benchmark-level coverage over the full assignment pool.
+            Progress updates, coverage, and standings appear here during the event.
           </p>
-        </div>
-        <div class="chip-row">
-          ${renderChip(provider.mode === "mock" ? "local-only stats" : "shared event stats", provider.mode === "mock" ? "warning" : "success")}
         </div>
       </div>
 
       <div class="stat-grid">
         <article class="stat-card">
           <p class="stat-card__value">${formatNumber(stats.participantCount)}</p>
-          <p class="stat-card__label">Participants seen by this mode</p>
+          <p class="stat-card__label">Participants</p>
         </article>
         <article class="stat-card">
           <p class="stat-card__value">${formatNumber(stats.submissionCount)}</p>
@@ -1159,7 +1265,7 @@ function renderLiveStatsSection() {
         </article>
         <article class="stat-card">
           <p class="stat-card__value">${formatHours(stats.collectedHours)}</p>
-          <p class="stat-card__label">Human-hours logged in this mode</p>
+          <p class="stat-card__label">Human-hours logged</p>
         </article>
       </div>
 
@@ -1168,7 +1274,7 @@ function renderLiveStatsSection() {
           <div class="surface-card__header">
             <div>
               <p class="surface-card__eyebrow">Coverage</p>
-              <h3>Imported benchmark progress</h3>
+              <h3>Benchmark progress</h3>
             </div>
           </div>
           <div class="bar-chart">
@@ -1188,7 +1294,7 @@ function renderLiveStatsSection() {
           <div class="surface-card__header">
             <div>
               <p class="surface-card__eyebrow">Leaderboard</p>
-              <h3>Current local standings</h3>
+              <h3>Current standings</h3>
             </div>
           </div>
           <div class="benchmark-list">
@@ -1292,10 +1398,11 @@ function renderApp() {
   root.innerHTML = `
     ${renderHeroSection()}
     ${renderOverviewSection()}
+    ${renderFormatSection()}
     ${renderBenchmarksSection()}
     ${shouldRenderSolveSection() ? renderSolveSection() : renderPreviewLockedSection()}
+    ${renderFaqSection()}
     ${shouldRenderStatsSection() ? renderLiveStatsSection() : ""}
-    ${shouldRenderAdminSection() ? renderAdminSection() : ""}
   `;
 
   syncNavigation();
@@ -1309,14 +1416,8 @@ function renderApp() {
 
 function syncNavigation() {
   const hiddenTargets = new Set();
-  if (!shouldRenderSolveSection()) {
-    hiddenTargets.add("solve");
-  }
   if (!shouldRenderStatsSection()) {
     hiddenTargets.add("stats");
-  }
-  if (!shouldRenderAdminSection()) {
-    hiddenTargets.add("admin");
   }
 
   document.querySelectorAll("[data-nav-link]").forEach((node) => {
@@ -1335,8 +1436,8 @@ async function refreshData(options = {}) {
 
   if (provider.mode === "api" && !state.auth.user) {
     state.participant = null;
-    state.catalog = [];
-    state.tracks = [];
+    state.catalog = benchmarkCatalog;
+    state.tracks = hackathonTracks;
     state.mySubmissions = [];
     state.liveStats = null;
     state.activeAssignment = null;
@@ -1352,8 +1453,8 @@ async function refreshData(options = {}) {
     } catch (error) {
       if (isErrorStatus(error, 404)) {
         state.participant = null;
-        state.catalog = [];
-        state.tracks = [];
+        state.catalog = benchmarkCatalog;
+        state.tracks = hackathonTracks;
         state.mySubmissions = [];
         state.liveStats = null;
         state.activeAssignment = null;
@@ -1456,7 +1557,7 @@ function attachListeners() {
           "success",
           provider.mode === "mock" ? "Profile saved" : "Registration complete",
           provider.mode === "mock"
-            ? "Local participant profile is ready for the queue."
+            ? "Your participant profile is ready."
             : "Authenticated participant is registered for the live event."
         );
       } catch (error) {
@@ -1470,7 +1571,7 @@ function attachListeners() {
   if (editProfileButton && provider.mode === "mock") {
     editProfileButton.addEventListener("click", async () => {
       await provider.saveParticipant(null);
-      setFlash("warning", "Profile cleared", "Local profile cleared so you can enter a new one.");
+      setFlash("warning", "Profile cleared", "Your profile was cleared so you can enter a new one.");
       await refreshData({ preserveFlash: true });
     });
   }
@@ -1521,8 +1622,8 @@ function attachListeners() {
         if (!assignment) {
           setFlash(
             "warning",
-            "No demo task available",
-            "This track has no unsolved mock assignment left in the current import."
+            "No task available right now",
+            "This track has no unsolved assignment left in the current pool."
           );
         } else {
           state.activeAssignment = assignment;
@@ -1545,7 +1646,7 @@ function attachListeners() {
       state.activeAssignment = null;
       state.timerStartedAtMs = null;
       state.draftAnswer = "";
-      setFlash("warning", "Assignment released", "Active task released back to the local queue.");
+      setFlash("warning", "Assignment released", "The active task was returned to the queue.");
       await refreshData({ preserveFlash: true });
     });
   }
