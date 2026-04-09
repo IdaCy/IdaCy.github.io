@@ -279,12 +279,6 @@ function getLaterBenchmarks() {
     .slice(0, 4);
 }
 
-function getTeamBenchmarks() {
-  return state.catalog.filter((item) =>
-    String(item.contributor || "").toLowerCase().includes("ifc24")
-  );
-}
-
 function sumItemCount(benchmarks) {
   return benchmarks.reduce((sum, item) => sum + Number(item.itemCount || 0), 0);
 }
@@ -326,8 +320,8 @@ function renderPoolBenchmarkCard(benchmark) {
 
       <div class="meta-grid">
         <div class="meta-grid__cell">
-          <span class="meta-grid__label">From</span>
-          <span class="meta-grid__value">${escapeHtml(benchmark.contributor)}</span>
+          <span class="meta-grid__label">Status</span>
+          <span class="meta-grid__value">${benchmark.baselineStatus === "has_real" ? "reference set" : "needs measured baseline"}</span>
         </div>
         <div class="meta-grid__cell">
           <span class="meta-grid__label">Pool Size</span>
@@ -412,7 +406,7 @@ function renderHeroSection() {
 function renderOverviewSection() {
   const estimatedOnly = getEstimatedOnlyBenchmarks();
   const calibration = getCalibrationBenchmarks();
-  const teamBenchmarks = getTeamBenchmarks();
+  const privateBenchmarks = estimatedOnly.filter((item) => item.visibility === "private");
 
   return `
     <section id="overview" class="section-grid">
@@ -459,26 +453,27 @@ function renderOverviewSection() {
       <aside class="surface-card">
         <div class="surface-card__header">
           <div>
-            <p class="surface-card__eyebrow">Our Contributions</p>
-            <h2>Benchmarks we added</h2>
+            <p class="surface-card__eyebrow">At A Glance</p>
+            <h2>What the opening release focuses on</h2>
           </div>
         </div>
-        <div class="coverage-list">
-          ${teamBenchmarks.map((benchmark) => `
-            <article class="coverage-card">
-              <div class="coverage-card__header">
-                <div>
-                  <h3>${escapeHtml(formatBenchmarkTitle(benchmark))}</h3>
-                  <p>${escapeHtml(benchmark.description)}</p>
-                </div>
-                <div class="chip-row">
-                  ${renderChip(benchmark.baselineStatus === "has_real" ? "already grounded" : "opening target", benchmark.baselineStatus === "has_real" ? "success" : "accent")}
-                  ${renderChip(benchmark.visibility === "private" ? "invite-only" : "public", benchmark.visibility === "private" ? "warning" : "muted")}
-                </div>
-              </div>
-              <p class="muted-text">${escapeHtml(benchmark.notes)}</p>
-            </article>
-          `).join("")}
+        <div class="feature-grid">
+          ${renderInfoCard(
+            "Measured baselines first",
+            "The opening release focuses on benchmark families that are practical to cover in a first pass and useful for turning estimates into measured human timings."
+          )}
+          ${renderInfoCard(
+            "Public and invite-only tracks",
+            `${formatNumber(privateBenchmarks.length)} benchmark family in the current pool is invite-only; the rest of the opening overview is public.`
+          )}
+          ${renderInfoCard(
+            "Reference sets included",
+            `${formatNumber(calibration.length)} benchmark families with existing human baselines are listed as comparison points alongside the no-baseline pool.`
+          )}
+          ${renderInfoCard(
+            "One page before and after launch",
+            "This public page stays the main event page. The tasks section opens in place when the hackathon starts."
+          )}
         </div>
       </aside>
     </section>
