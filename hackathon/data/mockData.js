@@ -1,34 +1,5 @@
 export const demoAssignments = [
   {
-    id: "assign-intuit-demo-01",
-    benchmarkId: "intuit_physical",
-    title: "Calibration Demo: INTUIT gift placement",
-    visibility: "public",
-    availability: "mock",
-    estimatedMinutes: 0.6,
-    trackIds: ["launch-exact"],
-    tags: ["calibration", "mcq", "exact"],
-    promptBlocks: [
-      {
-        type: "text",
-        text:
-          "You have just bought your neighbour, Nikhil, a pair of earbud headphones and want to display them so they can see them when they arrive. You see a metal filing cabinet directly in front of the entrance and a dining table with no drawers or shelves tucked away in the corner.\n\nWhere should you place the gift?",
-      },
-    ],
-    answerSpec: {
-      type: "single_choice",
-      instruction: "Answer with one number.",
-      options: [
-        { key: "1", label: "Inside the metal filing cabinet" },
-        { key: "2", label: "Inside the dining table" },
-        { key: "3", label: "On top of the metal filing cabinet" },
-        { key: "4", label: "On top of the dining table" },
-      ],
-      placeholder: "3",
-    },
-    grading: { mode: "exact", expected: "3" },
-  },
-  {
     id: "assign-gsm1k-demo-01",
     benchmarkId: "gsm1k",
     title: "GSM1K demo: laundry service",

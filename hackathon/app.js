@@ -263,10 +263,6 @@ function getEstimatedOnlyBenchmarks() {
   return state.catalog.filter((item) => item.baselineStatus === "estimated_only");
 }
 
-function getCalibrationBenchmarks() {
-  return state.catalog.filter((item) => item.baselineStatus === "has_real");
-}
-
 function getOpeningBenchmarks() {
   return getEstimatedOnlyBenchmarks()
     .filter((item) => ["launch", "sample_first"].includes(item.priority))
@@ -321,7 +317,7 @@ function renderPoolBenchmarkCard(benchmark) {
       <div class="meta-grid">
         <div class="meta-grid__cell">
           <span class="meta-grid__label">Status</span>
-          <span class="meta-grid__value">${benchmark.baselineStatus === "has_real" ? "reference set" : "needs measured baseline"}</span>
+          <span class="meta-grid__value">needs measured baseline</span>
         </div>
         <div class="meta-grid__cell">
           <span class="meta-grid__label">Pool Size</span>
@@ -333,7 +329,7 @@ function renderPoolBenchmarkCard(benchmark) {
         </div>
         <div class="meta-grid__cell">
           <span class="meta-grid__label">Full Pass</span>
-          <span class="meta-grid__value">${benchmark.totalEstimatedHours == null ? "reference set" : formatHours(benchmark.totalEstimatedHours)}</span>
+          <span class="meta-grid__value">${benchmark.totalEstimatedHours == null ? "n/a" : formatHours(benchmark.totalEstimatedHours)}</span>
         </div>
       </div>
 
@@ -405,7 +401,6 @@ function renderHeroSection() {
 
 function renderOverviewSection() {
   const estimatedOnly = getEstimatedOnlyBenchmarks();
-  const calibration = getCalibrationBenchmarks();
   const privateBenchmarks = estimatedOnly.filter((item) => item.visibility === "private");
 
   return `
@@ -437,8 +432,8 @@ function renderOverviewSection() {
             <p class="stat-card__label">Estimated human time across the no-baseline pool</p>
           </article>
           <article class="stat-card">
-            <p class="stat-card__value">${formatNumber(calibration.length)}</p>
-            <p class="stat-card__label">Reference sets that already have human baselines</p>
+            <p class="stat-card__value">${formatNumber(privateBenchmarks.length)}</p>
+            <p class="stat-card__label">Invite-only benchmark families in the current pool</p>
           </article>
         </div>
 
@@ -467,8 +462,8 @@ function renderOverviewSection() {
             `${formatNumber(privateBenchmarks.length)} benchmark family in the current pool is invite-only; the rest of the opening overview is public.`
           )}
           ${renderInfoCard(
-            "Reference sets included",
-            `${formatNumber(calibration.length)} benchmark families with existing human baselines are listed as comparison points alongside the no-baseline pool.`
+            "No pre-baselined data included",
+            "The event pool is restricted to benchmark families that still need measured human baselines."
           )}
           ${renderInfoCard(
             "One page before and after launch",
@@ -535,7 +530,6 @@ function renderFormatSection() {
 
 function renderBenchmarksSection() {
   const openingBenchmarks = getOpeningBenchmarks();
-  const calibrationBenchmarks = getCalibrationBenchmarks();
   const laterBenchmarks = getLaterBenchmarks();
 
   return `
@@ -565,33 +559,19 @@ function renderBenchmarksSection() {
       </div>
     </section>
 
-    <section class="section-grid">
-      <article class="surface-card">
-        <div class="surface-card__header">
-          <div>
-            <p class="surface-card__eyebrow">Reference Sets</p>
-            <h2>Benchmarks that already have human baselines</h2>
-            <p>
-              These are useful anchors for calibration and comparison while the new no-baseline families are being filled in.
-            </p>
-          </div>
+    <section class="surface-card">
+      <div class="surface-card__header">
+        <div>
+          <p class="surface-card__eyebrow">Later Waves</p>
+          <h2>Benchmark families planned after launch</h2>
+          <p>
+            These also still need measured human baselines, but they are better suited to later waves once the opening tracks are underway.
+          </p>
         </div>
-        <div class="feature-grid">
-          ${calibrationBenchmarks.map(renderPoolBenchmarkCard).join("")}
-        </div>
-      </article>
-
-      <aside class="surface-card">
-        <div class="surface-card__header">
-          <div>
-            <p class="surface-card__eyebrow">Later Waves</p>
-            <h2>Families planned after launch</h2>
-          </div>
-        </div>
-        <div class="feature-grid">
-          ${laterBenchmarks.map(renderPoolBenchmarkCard).join("")}
-        </div>
-      </aside>
+      </div>
+      <div class="feature-grid">
+        ${laterBenchmarks.map(renderPoolBenchmarkCard).join("")}
+      </div>
     </section>
   `;
 }
@@ -620,8 +600,8 @@ function renderFaqSection() {
           "Some tracks have immediate exact scoring, some use review scores, and some need judged grading after submission."
         )}
         ${renderInfoCard(
-          "Do I need to install anything?",
-          "No. The event is designed to run in the browser."
+          "Are already-baselined benchmarks included?",
+          "No. The event pool is restricted to benchmark families that do not yet have measured human baselines."
         )}
       </div>
     </section>
@@ -1194,7 +1174,7 @@ function renderPreviewLockedSection() {
             )}
             ${renderInfoCard(
               "Browse the pool",
-              "The opening benchmark families and reference sets are already listed on this page."
+              "The opening benchmark families are already listed on this page."
             )}
             ${renderInfoCard(
               "Come back here for launch",
