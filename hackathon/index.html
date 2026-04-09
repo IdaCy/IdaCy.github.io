@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time Horizons Hackathon</title>
+  <meta
+    name="description"
+    content="Hackathon control room for collecting human baselines on time-horizons benchmarks."
+  >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="site-header">
+      <a class="site-header__home" href="../index.html">IdaCy</a>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="#overview">Overview</a>
+        <a href="#benchmarks">Benchmarks</a>
+        <a href="#solve">Solve</a>
+        <a href="#stats">Live Stats</a>
+        <a href="#admin">Admin</a>
+      </nav>
+    </header>
+
+    <main id="app-root"></main>
+
+    <noscript>
+      <section class="surface-card">
+        <h2>JavaScript Required</h2>
+        <p>This app needs JavaScript enabled.</p>
+      </section>
+    </noscript>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
