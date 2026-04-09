@@ -89,6 +89,22 @@ function getTrackById(trackId) {
   };
 }
 
+function isPublicPreview() {
+  return appConfig.release?.stage === "public_preview";
+}
+
+function shouldRenderSolveSection() {
+  return !isPublicPreview();
+}
+
+function shouldRenderStatsSection() {
+  return !isPublicPreview();
+}
+
+function shouldRenderAdminSection() {
+  return !isPublicPreview();
+}
+
 function getBenchmarkById(benchmarkId) {
   return state.catalog.find((benchmark) => benchmark.id === benchmarkId) || null;
 }
@@ -201,7 +217,9 @@ function renderHeroSection() {
   const focusedBenchmark = getBenchmarkById(state.preferredBenchmarkId);
   const accessStage = getAccessStage();
   const heroStatusText =
-    provider.mode === "mock"
+    isPublicPreview()
+      ? appConfig.release.previewMessage
+      : provider.mode === "mock"
       ? "Mock solve flow active; backend still required for private tracks and shared stats"
       : accessStage === "auth_required"
       ? "Sign in with a magic link to access the live event"
@@ -292,7 +310,11 @@ function renderOverviewSection() {
         </div>
 
         <div class="callout" style="margin-top: 18px;">
-          ${provider.mode === "mock" ? `
+          ${isPublicPreview() ? `
+            <strong>Public preview:</strong>
+            this page is currently in information-only mode. Solve, live stats, and admin sections
+            stay hidden until the launch switch is flipped.
+          ` : provider.mode === "mock" ? `
             <strong>Important:</strong>
             current mock mode is only a frontend stand-in. It cannot serve
             <code>monitor_training_poisoning</code> or synchronize real multi-user stats.
@@ -340,6 +362,7 @@ function renderOverviewSection() {
 
 function renderBenchmarkCard(benchmark) {
   const canDirectQueue =
+    !isPublicPreview() &&
     benchmark.frontendMode === "direct" &&
     benchmark.baselineStatus === "estimated_only" &&
     benchmark.visibility === "public";
@@ -400,7 +423,7 @@ function renderBenchmarkCard(benchmark) {
 
 function renderBenchmarksSection() {
   const accessStage = getAccessStage();
-  if (provider.mode === "api" && accessStage !== "ready") {
+  if (!isPublicPreview() && provider.mode === "api" && accessStage !== "ready") {
     return `
       <section id="benchmarks" class="surface-card">
         <div class="empty-state">
@@ -424,6 +447,7 @@ function renderBenchmarksSection() {
           <p>
             Catalog is seeded from the current submitted task definitions and filtered toward
             the estimated-only benchmarks that need hackathon attention.
+            ${isPublicPreview() ? " This preview lists the target pool only; assignment and answer flow stay locked." : ""}
           </p>
         </div>
         <div class="pill-row">
@@ -997,6 +1021,87 @@ function renderSolveSection() {
   `;
 }
 
+function renderPreviewLockedSection() {
+  return `
+    <section class="surface-card">
+      <div class="surface-card__header">
+        <div>
+          <p class="surface-card__eyebrow">Access</p>
+          <h2>Interactive views stay locked until launch</h2>
+          <p>
+            This public preview is intended to explain the event and benchmark scope without exposing
+            the solve workflow or event operations before release.
+          </p>
+        </div>
+      </div>
+
+      <div class="section-grid">
+        <article class="surface-card">
+          <div class="surface-card__header">
+            <div>
+              <p class="surface-card__eyebrow">Hidden For Now</p>
+              <h3>Not rendered in preview mode</h3>
+            </div>
+          </div>
+          <div class="benchmark-list">
+            <article class="benchmark-card">
+              <div class="benchmark-card__header">
+                <div>
+                  <h3>Assignment queue and task pages</h3>
+                  <p>Participants cannot claim tasks or see benchmark items until the site is switched out of preview mode.</p>
+                </div>
+              </div>
+            </article>
+            <article class="benchmark-card">
+              <div class="benchmark-card__header">
+                <div>
+                  <h3>Live event stats</h3>
+                  <p>Coverage, leaderboard, and submission totals stay private until the backend-backed event is live.</p>
+                </div>
+              </div>
+            </article>
+            <article class="benchmark-card">
+              <div class="benchmark-card__header">
+                <div>
+                  <h3>Admin controls</h3>
+                  <p>Configuration placeholders, exports, and reset controls are hidden from the public preview.</p>
+                </div>
+              </div>
+            </article>
+          </div>
+        </article>
+
+        <article class="surface-card">
+          <div class="surface-card__header">
+            <div>
+              <p class="surface-card__eyebrow">Launch Switch</p>
+              <h3>What changes at release</h3>
+            </div>
+          </div>
+          <div class="benchmark-list">
+            <article class="benchmark-card">
+              <div class="benchmark-card__header">
+                <div>
+                  <h3>Frontend</h3>
+                  <p>Set <code>release.stage</code> in <code>hackathon/config.js</code> away from <code>public_preview</code>.</p>
+                </div>
+              </div>
+            </article>
+            <article class="benchmark-card">
+              <div class="benchmark-card__header">
+                <div>
+                  <h3>Backend</h3>
+                  <p>Point the frontend at the deployed API and keep private tasks served one assignment at a time after auth.</p>
+                </div>
+              </div>
+            </article>
+          </div>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
 function renderLiveStatsSection() {
   const accessStage = getAccessStage();
   if (provider.mode === "api" && accessStage !== "ready") {
@@ -1188,17 +1293,36 @@ function renderApp() {
     ${renderHeroSection()}
     ${renderOverviewSection()}
     ${renderBenchmarksSection()}
-    ${renderSolveSection()}
-    ${renderLiveStatsSection()}
-    ${renderAdminSection()}
+    ${shouldRenderSolveSection() ? renderSolveSection() : renderPreviewLockedSection()}
+    ${shouldRenderStatsSection() ? renderLiveStatsSection() : ""}
+    ${shouldRenderAdminSection() ? renderAdminSection() : ""}
   `;
 
+  syncNavigation();
   attachListeners();
   if (state.activeAssignment) {
     startTimerIfNeeded();
   } else {
     stopTimerIfNeeded();
   }
+}
+
+function syncNavigation() {
+  const hiddenTargets = new Set();
+  if (!shouldRenderSolveSection()) {
+    hiddenTargets.add("solve");
+  }
+  if (!shouldRenderStatsSection()) {
+    hiddenTargets.add("stats");
+  }
+  if (!shouldRenderAdminSection()) {
+    hiddenTargets.add("admin");
+  }
+
+  document.querySelectorAll("[data-nav-link]").forEach((node) => {
+    const target = node.getAttribute("data-nav-link");
+    node.hidden = hiddenTargets.has(target);
+  });
 }
 
 async function refreshData(options = {}) {

@@ -6,6 +6,7 @@ This directory is the static frontend for the hackathon control room that will b
 
 - `index.html`, `styles.css`, and `app.js` provide a working static UI.
 - `config.js` is still set to `backendMode: "mock"` so the app works without secrets.
+- `config.js` also defaults to `release.stage = "public_preview"`, which hides solve, live-stats, and admin surfaces from the public site until launch.
 - `data/catalog.js` is the current benchmark catalog snapshot.
 - `data/mockData.js` seeds a demo queue and one protected-task placeholder.
 - `lib/provider.js` supports both:
@@ -26,9 +27,18 @@ This directory is the static frontend for the hackathon control room that will b
 
 1. Deploy the Supabase scaffold from your private backend workspace.
 2. Replace the placeholders in `config.js`.
-3. Set `backendMode` to `"api"`.
-4. Set `apiBaseUrl` to `https://REPLACE_WITH_SUPABASE_PROJECT_REF.supabase.co/functions/v1`.
-5. Rebuild the benchmark manifest from the submitted `time-horizons` task directories.
+3. Set `release.stage` away from `"public_preview"` so the interactive sections render.
+4. Set `backendMode` to `"api"`.
+5. Set `apiBaseUrl` to `https://REPLACE_WITH_SUPABASE_PROJECT_REF.supabase.co/functions/v1`.
+6. Rebuild the benchmark manifest from the submitted `time-horizons` task directories.
+
+## Recommended hosting split
+
+- Public frontend: `IdaCy.github.io/hackathon/` on GitHub Pages
+- Private backend code: separate private repo or local-only working copy
+- Live backend runtime: deployed Supabase project with auth, database, storage, and edge functions
+
+The backend does not need to live in the public Pages repo. Keeping it in a separate private repo is the cleaner setup once the preview is pushed.
 
 ## What remains placeholder-driven
 

@@ -3,6 +3,11 @@ export const appConfig = {
   apiBaseUrl: "https://REPLACE_WITH_BACKEND_BASE_URL",
   authMode: "supabase_magic_link",
   privateTaskAccess: "backend_only",
+  release: {
+    stage: "public_preview",
+    previewMessage:
+      "Public preview only. Registration, task access, live stats, and admin controls stay locked until launch.",
+  },
   event: {
     id: "spring-2026-baseline-drive",
     name: "Spring 2026 Baseline Drive",
