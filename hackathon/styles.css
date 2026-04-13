@@ -1,14 +1,15 @@
 :root {
-  --paper: #f5f8fb;
-  --panel: #ffffff;
-  --wash: #e6f1ec;
-  --ink: #142019;
-  --ink-soft: #4b5c52;
-  --leaf: #2f6848;
-  --sky: #2c6f8f;
-  --rust: #a54836;
-  --line: rgba(20, 32, 25, 0.16);
-  --shadow: 0 18px 44px rgba(20, 32, 25, 0.1);
+  --paper: #f4ead7;
+  --paper-strong: #ead5b6;
+  --panel: #fff9ef;
+  --ink: #203126;
+  --ink-soft: #465b4d;
+  --leaf: #2f5a44;
+  --moss: #75946d;
+  --rust: #b65a30;
+  --gold: #d4a450;
+  --line: rgba(32, 49, 38, 0.14);
+  --shadow: 0 22px 60px rgba(28, 46, 34, 0.12);
   --radius-lg: 8px;
   --radius-md: 8px;
   --radius-sm: 6px;
@@ -27,9 +28,22 @@ body {
   min-height: 100vh;
   color: var(--ink);
   background:
-    linear-gradient(180deg, var(--wash), rgba(245, 248, 251, 0) 22rem),
+    radial-gradient(circle at top left, rgba(212, 164, 80, 0.22), transparent 28rem),
+    linear-gradient(180deg, rgba(47, 90, 68, 0.06), transparent 22rem),
     var(--paper);
   font-family: "Familjen Grotesk", sans-serif;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(32, 49, 38, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(32, 49, 38, 0.03) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+  opacity: 0.5;
 }
 
 a {
@@ -37,6 +51,8 @@ a {
 }
 
 .page-shell {
+  position: relative;
+  z-index: 1;
   width: min(1120px, calc(100vw - 32px));
   margin: 0 auto;
   padding: 20px 0 56px;
@@ -60,7 +76,7 @@ a {
   padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 249, 239, 0.72);
   text-decoration: none;
   color: var(--ink-soft);
   font-weight: 600;
@@ -97,7 +113,7 @@ a {
 .surface-card {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 249, 239, 0.82);
   box-shadow: var(--shadow);
 }
 
@@ -106,6 +122,8 @@ a {
   grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
   gap: 24px;
   padding: 30px;
+  background:
+    linear-gradient(135deg, rgba(255, 249, 239, 0.93), rgba(234, 213, 182, 0.82));
 }
 
 .eyebrow,
@@ -176,7 +194,7 @@ a {
 }
 
 .metric-tile--accent {
-  background: var(--sky);
+  background: linear-gradient(135deg, rgba(47, 90, 68, 0.96), rgba(117, 148, 109, 0.82));
   color: white;
   border-color: transparent;
 }
