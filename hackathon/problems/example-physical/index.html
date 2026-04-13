@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Physical Intuition Example - Time Horizons Hackathon</title>
+  <meta name="description" content="Example after-release problem for the Time Horizons Hackathon.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="../../styles.css">
+  <link rel="stylesheet" href="../../release.css">
+</head>
+<body data-problem-page="true">
+  <div class="page-shell contest-shell">
+    <header class="contest-header">
+      <div>
+        <p class="eyebrow">Problem A</p>
+        <h1>Physical Intuition Example</h1>
+        <p>Read the task, answer once, and submit when you are done. The timer starts when this page opens.</p>
+      </div>
+      <nav class="contest-nav" aria-label="Contest">
+        <a class="btn btn--secondary" href="../../contest/">Problems</a>
+        <a class="btn btn--secondary" href="../../submissions/">Submissions</a>
+      </nav>
+    </header>
+
+    <main class="contest-layout">
+      <section class="surface-card problem-card">
+        <div class="surface-card__header">
+          <p class="surface-card__eyebrow">Statement</p>
+          <h2>Where will the bead land?</h2>
+        </div>
+
+        <div class="problem-statement">
+          <p>
+            A smooth bead is released from rest at the top of a frictionless semicircular bowl.
+            The bowl is fixed to the table. The bead slides down the inside of the bowl and leaves
+            the rim at the lowest point, where the bowl opens onto a flat horizontal table.
+          </p>
+          <p>
+            Assume there is no air resistance and the table is frictionless after the bead leaves
+            the bowl. Which statement is true immediately after the bead leaves the bowl?
+          </p>
+          <div class="example-box">
+            <ul>
+              <li>A. It stops because it has reached the bottom.</li>
+              <li>B. It keeps moving horizontally at constant speed.</li>
+              <li>C. It accelerates upward because the bowl was curved.</li>
+              <li>D. It reverses direction and climbs back up the bowl.</li>
+            </ul>
+          </div>
+        </div>
+
+        <form class="answer-form" data-submission-form>
+          <label for="answer">Answer</label>
+          <textarea id="answer" data-answer placeholder="Enter A, B, C, or D and any short note you want to include."></textarea>
+          <div class="inline-actions">
+            <button class="btn btn--primary" type="submit">Submit</button>
+            <a class="btn btn--secondary" href="../../submissions/">View Submissions</a>
+          </div>
+          <p class="hero-copy" data-submit-status aria-live="polite"></p>
+        </form>
+      </section>
+
+      <aside class="surface-card">
+        <div class="surface-card__header">
+          <p class="surface-card__eyebrow">Timer</p>
+          <h2 data-elapsed>0:00</h2>
+        </div>
+        <div class="sidebar-list">
+          <div class="sidebar-row"><span>Track</span><strong>Physical</strong></div>
+          <div class="sidebar-row"><span>Estimate</span><strong>3 min</strong></div>
+          <div class="sidebar-row"><span>Scoring</span><strong>Exact answer</strong></div>
+          <div class="sidebar-row"><span>Status</span><strong>Open</strong></div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="../../release.js" defer></script>
+</body>
+</html>

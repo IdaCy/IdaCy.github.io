@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Time Horizons Hackathon Contest</title>
+  <meta name="description" content="After-release contest view for the Time Horizons Hackathon.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../release.css">
+</head>
+<body>
+  <div class="page-shell contest-shell">
+    <header class="contest-header">
+      <div>
+        <p class="eyebrow">After release prototype</p>
+        <h1>Contest</h1>
+        <p>Choose a task, solve it, and submit your answer. This prototype stores example submissions in your browser only.</p>
+      </div>
+      <nav class="contest-nav" aria-label="Contest">
+        <a class="btn btn--primary" href="./">Problems</a>
+        <a class="btn btn--secondary" href="../submissions/">Submissions</a>
+        <a class="btn btn--secondary" href="../problems/example-physical/">Example Problem</a>
+      </nav>
+    </header>
+
+    <main class="contest-layout">
+      <section class="surface-card">
+        <div class="surface-card__header">
+          <p class="surface-card__eyebrow">Problemset</p>
+          <h2>Released tasks</h2>
+        </div>
+        <table class="contest-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Task</th>
+              <th>Track</th>
+              <th>Estimate</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>A</td>
+              <td><a href="../problems/example-physical/">Physical Intuition Example</a></td>
+              <td>Physical reasoning</td>
+              <td>3 min</td>
+              <td><span class="status-pill">Open</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <aside class="surface-card">
+        <div class="surface-card__header">
+          <p class="surface-card__eyebrow">Round</p>
+          <h2>Hackathon baseline drive</h2>
+        </div>
+        <div class="sidebar-list">
+          <div class="sidebar-row"><span>Mode</span><strong>Prototype</strong></div>
+          <div class="sidebar-row"><span>Tasks</span><strong>1</strong></div>
+          <div class="sidebar-row"><span>Timing</span><strong>Browser timer</strong></div>
+          <div class="sidebar-row"><span>Storage</span><strong>Local only</strong></div>
+        </div>
+      </aside>
+    </main>
+  </div>
+</body>
+</html>

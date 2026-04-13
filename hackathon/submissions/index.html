@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Submissions - Time Horizons Hackathon</title>
+  <meta name="description" content="After-release submissions view for the Time Horizons Hackathon.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../release.css">
+</head>
+<body>
+  <div class="page-shell contest-shell">
+    <header class="contest-header">
+      <div>
+        <p class="eyebrow">After release prototype</p>
+        <h1>Submissions</h1>
+        <p>Submitted answers from this browser. The live version should replace this with backend storage.</p>
+      </div>
+      <nav class="contest-nav" aria-label="Contest">
+        <a class="btn btn--secondary" href="../contest/">Problems</a>
+        <a class="btn btn--secondary" href="../problems/example-physical/">Example Problem</a>
+      </nav>
+    </header>
+
+    <main class="surface-card">
+      <div class="surface-card__header">
+        <p class="surface-card__eyebrow">My Submissions</p>
+        <h2>Status table</h2>
+      </div>
+      <div class="submission-empty" data-submissions-empty>No submissions from this browser yet.</div>
+      <table class="contest-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Problem</th>
+            <th>Time</th>
+            <th>Status</th>
+            <th>Answer</th>
+          </tr>
+        </thead>
+        <tbody data-submissions-body></tbody>
+      </table>
+    </main>
+  </div>
+
+  <script src="../release.js" defer></script>
+</body>
+</html>
