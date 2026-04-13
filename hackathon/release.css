@@ -134,6 +134,51 @@
   font-weight: 700;
 }
 
+.mcqa-options {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.mcqa-options legend {
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+
+.mcqa-option {
+  display: grid;
+  grid-template-columns: auto 36px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 54px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.mcqa-option input {
+  margin: 0;
+}
+
+.mcqa-option span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: rgba(47, 90, 68, 0.12);
+  color: var(--leaf);
+}
+
+.mcqa-option strong {
+  font-weight: 600;
+  line-height: 1.45;
+}
+
 .answer-form textarea {
   width: 100%;
   min-height: 120px;

@@ -56,8 +56,29 @@
         </div>
 
         <form class="answer-form" data-submission-form>
-          <label for="answer">Answer</label>
-          <textarea id="answer" data-answer placeholder="Enter A, B, C, or D and any short note you want to include."></textarea>
+          <fieldset class="mcqa-options" data-answer-group>
+            <legend>Answer</legend>
+            <label class="mcqa-option">
+              <input type="radio" name="answer" value="A">
+              <span>A</span>
+              <strong>It stops because it has reached the bottom.</strong>
+            </label>
+            <label class="mcqa-option">
+              <input type="radio" name="answer" value="B">
+              <span>B</span>
+              <strong>It keeps moving horizontally at constant speed.</strong>
+            </label>
+            <label class="mcqa-option">
+              <input type="radio" name="answer" value="C">
+              <span>C</span>
+              <strong>It accelerates upward because the bowl was curved.</strong>
+            </label>
+            <label class="mcqa-option">
+              <input type="radio" name="answer" value="D">
+              <span>D</span>
+              <strong>It reverses direction and climbs back up the bowl.</strong>
+            </label>
+          </fieldset>
           <div class="inline-actions">
             <button class="btn btn--primary" type="submit">Submit</button>
             <a class="btn btn--secondary" href="../../submissions/">View Submissions</a>

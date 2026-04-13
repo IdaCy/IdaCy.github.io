@@ -52,17 +52,18 @@ function initProblemPage() {
   window.setInterval(updateTimer, 1000);
 
   const form = document.querySelector("[data-submission-form]");
-  const answer = document.querySelector("[data-answer]");
   const status = document.querySelector("[data-submit-status]");
-  if (!form || !answer || !status) {
+  if (!form || !status) {
     return;
   }
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    const submittedAnswer = answer.value.trim();
+    const selectedOption = form.querySelector("input[name='answer']:checked");
+    const freeTextAnswer = form.querySelector("[data-answer]");
+    const submittedAnswer = selectedOption?.value || freeTextAnswer?.value.trim() || "";
     if (!submittedAnswer) {
-      status.textContent = "Add an answer before submitting.";
+      status.textContent = "Select an answer before submitting.";
       return;
     }
 
@@ -78,7 +79,7 @@ function initProblemPage() {
     });
     saveSubmissions(submissions);
     status.textContent = "Submission recorded locally for this prototype.";
-    answer.value = "";
+    form.reset();
   });
 }
 
