@@ -1,6 +1,6 @@
 window.HACKATHON_CONFIG = {
-  supabaseUrl: "REPLACE_WITH_SUPABASE_PROJECT_URL",
-  supabaseAnonKey: "REPLACE_WITH_SUPABASE_ANON_KEY",
-  functionsBaseUrl: "REPLACE_WITH_SUPABASE_PROJECT_URL/functions/v1",
+  supabaseUrl: "https://zfdkkucfbksyedapaxcc.supabase.co",
+  supabaseAnonKey: "sb_publishable_rgBKfDEmvWLDnZ6kLTypNA_A-jtyERs",
+  functionsBaseUrl: "https://zfdkkucfbksyedapaxcc.supabase.co/functions/v1",
   eventName: "Time Horizons Hackathon",
 };
