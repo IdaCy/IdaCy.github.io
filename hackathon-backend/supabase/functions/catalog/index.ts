@@ -1,6 +1,7 @@
 import { requireParticipant } from "../_shared/auth.ts";
 import { json, HttpError } from "../_shared/http.ts";
 import { withRequestPolicy } from "../_shared/policy.ts";
+import { displayProblemTitle } from "../_shared/problem_title.ts";
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -115,7 +116,7 @@ Deno.serve((request) =>
             );
             return {
               id: item.item_key,
-              title: renderPayload.title || item.item_key,
+              title: displayProblemTitle(String(benchmark.benchmark_key), String(item.item_key), renderPayload),
               estimatedMinutes: metadata.estimated_minutes ?? asObject(metadata.estimated_time).median ?? null,
               attempted: itemAssignments.filter((assignment) => assignment.participant_id).length,
               successes: successfulParticipants.size,

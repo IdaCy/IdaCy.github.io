@@ -63,6 +63,94 @@ function formatMinutes(minutes) {
   return `${value.toFixed(value < 10 ? 1 : 0)} min`;
 }
 
+function titleCasePhrase(value) {
+  const acronyms = new Set(["api", "cli", "csv", "json", "pr", "ssn", "url", "yaml"]);
+  const smallWords = new Set(["a", "an", "and", "as", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "with"]);
+  return String(value || "")
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      if (acronyms.has(lower)) return lower.toUpperCase();
+      if (index > 0 && smallWords.has(lower)) return lower;
+      return `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`;
+    })
+    .join(" ");
+}
+
+function compactText(value, maxWords = 7) {
+  return String(value || "")
+    .replace(/[`*_#>]+/g, "")
+    .replace(/^(I('| wi)ll|I propose|Create|Add|Implement|Allow)\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[ :;,.]+|[ :;,.]+$/g, "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, maxWords)
+    .join(" ");
+}
+
+function extract(pattern, text) {
+  const match = String(text || "").match(pattern);
+  return match ? match[1].replace(/\s+/g, " ").trim() : "";
+}
+
+function isRawProblemTitle(title, itemId) {
+  return !title || title === itemId || title.includes("__transcripts_") || /^sandbag_\d+$/.test(title);
+}
+
+function promptTextFromAssignment(assignment) {
+  return (assignment?.promptBlocks || [])
+    .map((block) => block?.text || "")
+    .filter(Boolean)
+    .join("\n");
+}
+
+function inferProblemTitle(benchmarkId, itemId, text = "") {
+  if (benchmarkId === "ctrl_alt_deceit_sandbag") {
+    const plan = extract(/Plan:\s*(.*?)(?:\n\nCode:|\nCode:|$)/is, text);
+    if (plan) {
+      const topic = extract(/\b(?:for|on)\s+(?:this|the|a|an)?\s*([^,.]+?)\s+task\b/i, plan) ||
+        extract(/\bto\s+(predict|detect|classify)\s+([^,.]+)/i, plan) ||
+        compactText(plan, 5);
+      return `Solver Review: ${compactText(topic, 5)}`;
+    }
+    return "Solver Underperformance Review";
+  }
+  if (benchmarkId === "shade_monitor_action_only" || benchmarkId === "shade_monitor_cot_action") {
+    return `SHADE: ${titleCasePhrase(String(itemId || "").split("__", 1)[0] || "Monitoring Review")}`;
+  }
+  if (benchmarkId === "vibe_coding_sabotage") {
+    const match = String(itemId || "").match(/^PR\d+_([^_]+)_(?:honest|cached_[^_]+_[^_]+)_[^_]+_\d+_(.+)$/) ||
+      String(itemId || "").match(/^PR\d+_honest_cache_([^_]+)_\d+_\d+_(.+)$/);
+    return match ? `PR Review: ${titleCasePhrase(match[1])}: ${titleCasePhrase(match[2])}` : "PR Sabotage Review";
+  }
+  if (benchmarkId === "hash") {
+    const fnName = String(itemId || "").match(/^hash_hash_(.*?)__/)?.[1] || "hash";
+    const length = String(itemId || "").match(/len(\d+)_/)?.[1];
+    const chain = String(itemId || "").match(/chain(\d+)_/)?.[1];
+    return [titleCasePhrase(`hash ${fnName}`), length ? `Len ${length}` : "", chain ? `Chain ${chain}` : ""]
+      .filter(Boolean)
+      .join(" ");
+  }
+  if (benchmarkId === "n_hop_lookup") {
+    const hop = String(itemId || "").match(/^hop(\d+)_/)?.[1];
+    return hop ? `${hop}-Hop Lookup` : "Lookup Chain";
+  }
+  if (benchmarkId === "stego_monitor") return "Stego Check";
+  if (benchmarkId === "stego_decode") return "Stego Decode";
+  if (benchmarkId === "stego_encode") return "Stego Encode";
+  return itemId;
+}
+
+function displayProblemTitle(benchmarkId, itemId, title, text = "") {
+  return isRawProblemTitle(String(title || ""), String(itemId || ""))
+    ? inferProblemTitle(benchmarkId, itemId, text)
+    : title;
+}
+
 function assignmentStartKey(assignmentId) {
   return `${TIMER_KEY_PREFIX}${assignmentId}`;
 }
@@ -505,7 +593,12 @@ function renderAssignment() {
       <article class="surface-card problem-card">
         <div class="surface-card__header">
           <p class="surface-card__eyebrow">${escapeHtml(assignment.benchmarkId)}</p>
-          <h2>${escapeHtml(assignment.title)}</h2>
+          <h2>${escapeHtml(displayProblemTitle(
+            assignment.benchmarkId,
+            assignment.itemId || assignment.title,
+            assignment.title,
+            promptTextFromAssignment(assignment),
+          ))}</h2>
         </div>
         <div class="problem-statement">
           ${(assignment.promptBlocks || []).map(renderPromptBlock).join("")}
@@ -601,7 +694,7 @@ function renderProblemRow(benchmark, problem) {
   return `
     <tr>
       <td>
-        <strong>${escapeHtml(problem.title || problem.id)}</strong>
+        <strong>${escapeHtml(displayProblemTitle(benchmark.id, problem.id, problem.title))}</strong>
         <span class="problem-id">${escapeHtml(problem.id)}</span>
       </td>
       <td>${formatMinutes(problem.estimatedMinutes)}</td>

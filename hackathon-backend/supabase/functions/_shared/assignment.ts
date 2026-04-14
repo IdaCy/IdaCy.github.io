@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { getEnv } from "./env.ts";
 import { HttpError } from "./http.ts";
+import { displayProblemTitle } from "./problem_title.ts";
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -318,13 +319,16 @@ export async function buildFrontendAssignment({
     1.0;
 
   const itemVisibility = String(item.visibility || benchmark.visibility || "public");
-  const title =
-    String(renderPayload.title || "") ||
-    `${String(benchmark.title || benchmark.benchmark_key)} · ${String(item.item_key)}`;
+  const title = displayProblemTitle(
+    String(benchmark.benchmark_key),
+    String(item.item_key),
+    renderPayload,
+  );
 
   return {
     id: String(assignment.id),
     benchmarkId: String(benchmark.benchmark_key),
+    itemId: String(item.item_key),
     title,
     visibility: itemVisibility,
     availability: "api",
