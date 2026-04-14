@@ -66,6 +66,21 @@ Deno.serve((request) =>
       throw new HttpError(409, "You have already started this problem, so it cannot be started again.");
     }
 
+    const existingSubmissionResult = await serviceClient
+      .from("submissions")
+      .select("id")
+      .eq("event_id", event.id)
+      .eq("benchmark_item_id", itemResult.data.id)
+      .eq("participant_id", participant.id)
+      .limit(1);
+
+    if (existingSubmissionResult.error) {
+      throw new HttpError(500, "Failed to check whether you already submitted this problem.", existingSubmissionResult.error);
+    }
+    if ((existingSubmissionResult.data || []).length > 0) {
+      throw new HttpError(409, "You have already started this problem, so it cannot be started again.");
+    }
+
     const assignmentResult = await serviceClient
       .from("assignments")
       .select("*")

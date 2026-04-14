@@ -109,18 +109,25 @@ Deno.serve((request) =>
             const participantSubmission = itemSubmissions.find(
               (submission) => String(submission.participant_id || "") === participantId,
             );
+            const attemptedParticipants = new Set(
+              [
+                ...itemAssignments.map((assignment) => String(assignment.participant_id || "")),
+                ...itemSubmissions.map((submission) => String(submission.participant_id || "")),
+              ].filter(Boolean),
+            );
             const successfulParticipants = new Set(
               itemSubmissions
                 .filter((submission) => submission.grading_status === "correct" || Number(submission.score_value) === 1)
-                .map((submission) => String(submission.participant_id || "")),
+                .map((submission) => String(submission.participant_id || ""))
+                .filter(Boolean),
             );
             return {
               id: item.item_key,
               title: displayProblemTitle(String(benchmark.benchmark_key), String(item.item_key), renderPayload),
               estimatedMinutes: metadata.estimated_minutes ?? asObject(metadata.estimated_time).median ?? null,
-              attempted: itemAssignments.filter((assignment) => assignment.participant_id).length,
+              attempted: attemptedParticipants.size,
               successes: successfulParticipants.size,
-              startedByMe: Boolean(participantAssignment),
+              startedByMe: Boolean(participantAssignment || participantSubmission),
               submittedByMe: Boolean(participantSubmission),
               myAssignmentId: participantAssignment?.id || null,
               myStatus: participantSubmission?.grading_status || participantAssignment?.status || null,
