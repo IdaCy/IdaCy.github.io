@@ -622,6 +622,8 @@ function renderProblemsPanel() {
       <ul>
         <li>attempt any number of problems below!</li>
         <li>you can only click at any one problem once, and then your time for that problem is running</li>
+        <li>you won't be able to open any one problem twice</li>
+        <li>everything takes a second or a few to load</li>
       </ul>
     </section>
     <section class="contest-layout">
