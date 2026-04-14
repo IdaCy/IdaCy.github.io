@@ -40,6 +40,7 @@ Deno.serve((request) =>
     return json(
       (submissionsResult.data || []).map((submission) => ({
         assignmentId: submission.assignment_id,
+        attemptNumber: submission.attempt_number || 1,
         benchmarkId: benchmarkMap.get(submission.benchmark_id) || submission.benchmark_id,
         participantEmail: participant.email,
         participantName: participant.name,

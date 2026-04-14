@@ -286,6 +286,27 @@
   outline: none;
 }
 
+.submission-result {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(47, 90, 68, 0.28);
+  border-radius: var(--radius-md);
+  background: rgba(47, 90, 68, 0.08);
+  padding: 16px;
+}
+
+.submission-result p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .sidebar-list {
   display: grid;
   gap: 10px;

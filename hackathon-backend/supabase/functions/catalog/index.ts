@@ -108,12 +108,17 @@ Deno.serve((request) =>
             const participantSubmission = itemSubmissions.find(
               (submission) => String(submission.participant_id || "") === participantId,
             );
+            const successfulParticipants = new Set(
+              itemSubmissions
+                .filter((submission) => submission.grading_status === "correct" || Number(submission.score_value) === 1)
+                .map((submission) => String(submission.participant_id || "")),
+            );
             return {
               id: item.item_key,
               title: renderPayload.title || item.item_key,
               estimatedMinutes: metadata.estimated_minutes ?? asObject(metadata.estimated_time).median ?? null,
               attempted: itemAssignments.filter((assignment) => assignment.participant_id).length,
-              successes: itemSubmissions.length,
+              successes: successfulParticipants.size,
               startedByMe: Boolean(participantAssignment),
               submittedByMe: Boolean(participantSubmission),
               myAssignmentId: participantAssignment?.id || null,

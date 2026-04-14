@@ -6,6 +6,7 @@ const state = {
   participant: null,
   catalog: [],
   activeAssignment: null,
+  submissionResult: null,
   stats: null,
   submissions: [],
   timerId: null,
@@ -83,6 +84,13 @@ function getAssignmentStart(assignmentId) {
 function getActiveSeconds() {
   if (!state.activeAssignment) {
     return 0;
+  }
+  if (
+    state.submissionResult &&
+    !state.submissionResult.canRetry &&
+    Number.isFinite(Number(state.submissionResult.activeSeconds))
+  ) {
+    return Math.max(0, Math.round(Number(state.submissionResult.activeSeconds)));
   }
   return Math.max(0, Math.round((Date.now() - getAssignmentStart(state.activeAssignment.id)) / 1000));
 }
@@ -224,6 +232,7 @@ async function handleSignOut() {
     state.session = null;
     state.participant = null;
     state.activeAssignment = null;
+    state.submissionResult = null;
     state.submissions = [];
     state.stats = null;
     setMessage("Signed out.");
@@ -264,6 +273,7 @@ async function handleStartProblem(benchmarkId, itemId) {
       }),
     });
     state.activeAssignment = assignment || null;
+    state.submissionResult = null;
     if (assignment) {
       getAssignmentStart(assignment.id);
       setMessage("Problem started. Your timer is running.");
@@ -290,7 +300,7 @@ async function handleSubmit(event) {
 
   try {
     const activeSeconds = getActiveSeconds();
-    await apiFetch("submit-solution", {
+    const submission = await apiFetch("submit-solution", {
       method: "POST",
       body: JSON.stringify({
         assignmentId: state.activeAssignment.id,
@@ -299,9 +309,31 @@ async function handleSubmit(event) {
         startedAt: new Date(getAssignmentStart(state.activeAssignment.id)).toISOString(),
       }),
     });
-    window.localStorage.removeItem(assignmentStartKey(state.activeAssignment.id));
+    state.submissionResult = submission;
+    state.error = "";
+    state.message = "";
+    await refreshStatsIfSignedIn();
+  } catch (error) {
+    setError(error);
+  }
+  render();
+}
+
+function handleTryAgain() {
+  state.submissionResult = null;
+  state.error = "";
+  state.message = "";
+  render();
+}
+
+async function handleNextProblem() {
+  try {
+    if (state.activeAssignment) {
+      window.localStorage.removeItem(assignmentStartKey(state.activeAssignment.id));
+    }
     state.activeAssignment = null;
-    setMessage("Submission saved.");
+    state.submissionResult = null;
+    setMessage("Choose another problem.");
     await loadContestData();
   } catch (error) {
     setError(error);
@@ -400,6 +432,37 @@ function renderAnswerInput(answerSpec) {
   `;
 }
 
+function renderSubmissionResult() {
+  const result = state.submissionResult;
+  if (!result) {
+    return "";
+  }
+
+  const attemptText = `Attempt ${Number(result.attemptNumber || 1)} of 3`;
+  let message = "Submission saved.";
+  if (result.successful) {
+    message = "Correct.";
+  } else if (result.canRetry) {
+    message = `That was not correct. ${Number(result.attemptsRemaining || 0)} attempts remaining.`;
+  } else if (result.gradingStatus === "incorrect") {
+    message = "That was not correct. No attempts remaining.";
+  } else if (String(result.gradingStatus || "").startsWith("pending")) {
+    message = "Submission saved for grading.";
+  }
+
+  return `
+    <div class="submission-result" role="status">
+      <span class="status-pill">${escapeHtml(attemptText)}</span>
+      <p>${escapeHtml(message)}</p>
+      ${result.explanation ? `<p>${escapeHtml(result.explanation)}</p>` : ""}
+      <div class="inline-actions">
+        ${result.canRetry ? `<button class="btn btn--primary" type="button" data-try-again>Try Again</button>` : ""}
+        ${result.canRetry ? "" : `<button class="btn btn--secondary" type="button" data-next-problem>Next Problem</button>`}
+      </div>
+    </div>
+  `;
+}
+
 function renderAssignment() {
   const assignment = state.activeAssignment;
   if (!assignment) {
@@ -415,13 +478,14 @@ function renderAssignment() {
         <div class="problem-statement">
           ${(assignment.promptBlocks || []).map(renderPromptBlock).join("")}
         </div>
-        <form class="answer-form" data-answer-form>
-          ${renderAnswerInput(assignment.answerSpec)}
-          <div class="inline-actions">
-            <button class="btn btn--primary" type="submit">Submit Answer</button>
-            <a class="btn btn--secondary" href="../submissions/">View Submissions</a>
-          </div>
-        </form>
+        ${state.submissionResult ? renderSubmissionResult() : `
+          <form class="answer-form" data-answer-form>
+            ${renderAnswerInput(assignment.answerSpec)}
+            <div class="inline-actions">
+              <button class="btn btn--primary" type="submit">Submit Answer</button>
+            </div>
+          </form>
+        `}
       </article>
       <aside class="surface-card">
         <div class="surface-card__header">
@@ -572,6 +636,7 @@ function renderSubmissionsTable() {
       <thead>
         <tr>
           <th>Benchmark</th>
+          <th>Attempt</th>
           <th>Time</th>
           <th>Status</th>
           <th>Answer</th>
@@ -581,6 +646,7 @@ function renderSubmissionsTable() {
         ${state.submissions.map((submission) => `
           <tr>
             <td>${escapeHtml(submission.benchmarkId)}</td>
+            <td>${escapeHtml(submission.attemptNumber || 1)}</td>
             <td>${formatSeconds(submission.activeSeconds)}</td>
             <td><span class="status-pill">${escapeHtml(submission.gradingStatus)}</span></td>
             <td class="submission-answer">${escapeHtml(submission.submittedAnswer)}</td>
@@ -673,6 +739,8 @@ function bind(root) {
   });
   root.querySelector("[data-registration-form]")?.addEventListener("submit", handleRegister);
   root.querySelector("[data-answer-form]")?.addEventListener("submit", handleSubmit);
+  root.querySelector("[data-try-again]")?.addEventListener("click", handleTryAgain);
+  root.querySelector("[data-next-problem]")?.addEventListener("click", handleNextProblem);
   root.querySelectorAll("[data-start-problem]").forEach((button) => {
     button.addEventListener("click", () => handleStartProblem(button.dataset.benchmarkId, button.dataset.itemId));
   });
