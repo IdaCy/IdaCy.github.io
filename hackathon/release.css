@@ -168,10 +168,20 @@
 }
 
 .problem-id {
-  display: block;
-  margin-top: 4px;
-  color: var(--ink-soft);
+  display: none;
+}
+
+.problem-table th,
+.problem-table td {
+  padding: 7px 12px;
+  vertical-align: middle;
+}
+
+.problem-table .btn {
+  min-height: 28px;
+  padding: 4px 10px;
   font-size: 0.9rem;
+  line-height: 1.1;
 }
 
 .problem-table .btn[disabled] {
