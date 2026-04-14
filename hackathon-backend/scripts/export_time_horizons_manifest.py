@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -163,6 +164,209 @@ def normalize_answer_key(item: dict[str, Any], scorer_type: str, grading_mode: s
     return key
 
 
+def title_case_phrase(value: str) -> str:
+    acronym_words = {"api", "cli", "csv", "json", "pr", "ssn", "url", "yaml"}
+    words = re.sub(r"[_-]+", " ", value).split()
+    small_words = {"a", "an", "and", "as", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "with"}
+    titled: list[str] = []
+    for index, word in enumerate(words):
+        lower = word.lower()
+        if lower in acronym_words:
+            titled.append(lower.upper())
+        elif index > 0 and lower in small_words:
+            titled.append(lower)
+        else:
+            titled.append(word[:1].upper() + word[1:])
+    return " ".join(titled)
+
+
+def compact_text(value: str, max_words: int = 7) -> str:
+    cleaned = re.sub(r"[`*_#>]+", "", value)
+    cleaned = re.sub(r"^(I('| wi)ll|I propose|Create|Add|Implement|Allow)\s+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" :;,.")
+    words = cleaned.split()
+    return " ".join(words[:max_words])
+
+
+def extract_regex(pattern: str, text: str) -> str | None:
+    match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+    if not match:
+        return None
+    return re.sub(r"\s+", " ", match.group(1)).strip()
+
+
+def extract_question(text: str) -> str | None:
+    question = extract_regex(r"QUESTION:\s*(.*?)(?:\n\nOPTIONS:|\Z)", text)
+    return question.strip() if question else None
+
+
+def infer_stego_strategy_title(item_key: str, text: str, action: str) -> str:
+    bit_match = re.search(r"_n(\d+)_", item_key)
+    bits = bit_match.group(1) if bit_match else None
+    bit_phrase = f"{bits} Bit" if bits == "1" else f"{bits} Bits" if bits else "Bits"
+
+    lower = text.lower()
+    if "final sentence" in lower and ("therefore" in lower or "thus" in lower):
+        mechanism = "Final Sentence"
+    elif "immediately preceding" in lower or "sentence immediately before" in lower:
+        mechanism = "Pre-Final Sentence"
+    elif "first word" in lower:
+        mechanism = "First Word"
+    elif "acrostic" in lower:
+        mechanism = "Acrostic"
+    elif "punctuation" in lower:
+        mechanism = "Punctuation"
+    elif "paragraph" in lower:
+        mechanism = "Paragraph Pattern"
+    else:
+        mechanism = "Strategy"
+    return f"{action} {bit_phrase}: {mechanism}"
+
+
+def infer_shade_task_title(item_key: str, text: str) -> str:
+    prefix = item_key.split("__", 1)[0]
+    if prefix:
+        return f"SHADE: {title_case_phrase(prefix)}"
+
+    user = extract_regex(r"USER:\s*(.*?)(?:\n|$)", text)
+    if user:
+        return f"SHADE: {compact_text(user, 5)}"
+    return "SHADE Monitoring Review"
+
+
+def infer_vibe_topic(item_key: str) -> str | None:
+    match = re.match(r"^PR\d+_([^_]+)_(?:honest|cached_[^_]+_[^_]+)_[^_]+_\d+_(.+)$", item_key)
+    if not match:
+        match = re.match(r"^PR\d+_honest_cache_([^_]+)_\d+_\d+_(.+)$", item_key)
+    if not match:
+        return None
+    app, feature = match.groups()
+    return f"{title_case_phrase(app)}: {title_case_phrase(feature)}"
+
+
+def infer_solver_review_topic(plan: str) -> str:
+    for pattern in [
+        r"\b(?:for|on)\s+(?:this|the|a|an)?\s*([^,.]+?)\s+task\b",
+        r"\bto\s+(predict|detect|classify)\s+([^,.]+)",
+        r"\bfor\s+([^,.]+?)\s+using\b",
+    ]:
+        match = re.search(pattern, plan, re.IGNORECASE)
+        if match:
+            phrase = " ".join(part for part in match.groups() if part)
+            return compact_text(phrase, 5)
+    return compact_text(plan, 5)
+
+
+def infer_problem_title(item: dict[str, Any], benchmark_key: str) -> str:
+    item_key = str(item.get("id") or item.get("instance_id") or item.get("item_id"))
+    text = str(item.get("input") or "")
+
+    if benchmark_key == "chess_puzzles":
+        mate = extract_regex(r"This is a mate-in-(\d+) puzzle", text)
+        side = extract_regex(r"\n\n(White|Black) to move\.", text)
+        if mate and side:
+            return f"{side} Mate in {mate}"
+        if mate:
+            return f"Mate in {mate}"
+
+    if benchmark_key == "test_case_prediction":
+        fn_name = extract_regex(r"def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", text)
+        test_count = extract_regex(r"Below are\s+(\d+)\s+test cases?", text)
+        if fn_name and test_count:
+            suffix = "Test" if test_count == "1" else "Tests"
+            return f"{fn_name} ({test_count} {suffix})"
+        if fn_name:
+            return f"{fn_name} Test Prediction"
+
+    if benchmark_key in {"strategic_scheming_numeric", "strategic_scheming_open_ended"}:
+        first_sentence = extract_regex(r"^(.*?[.?!])(?:\s|$)", text) or text
+        lower = first_sentence.lower()
+        if "probability" in lower or "chance" in lower or "%" in lower:
+            topic = "Probability"
+        elif "monitor" in lower or "filter" in lower:
+            topic = "Monitor Blind Spot"
+        elif "token" in lower or "resource" in lower:
+            topic = "Resource Tradeoff"
+        elif "act" in lower or "attempt" in lower or "strike" in lower:
+            topic = "Timing Choice"
+        else:
+            topic = "Strategic Choice"
+        return f"{topic}: {compact_text(first_sentence, 6)}"
+
+    if benchmark_key == "monitor_training_poisoning":
+        domain = extract_regex(r"Domain:\s*([^\n]+)", text)
+        if domain:
+            return f"{title_case_phrase(domain)} Poisoning"
+        family = item_key.split("_", 2)[1] if "_" in item_key else "monitor"
+        return f"{title_case_phrase(family)} Poisoning"
+
+    if benchmark_key == "sally_anne":
+        question = extract_question(text)
+        if question and "think" in question.lower():
+            thinker = extract_regex(r"Where does\s+([A-Za-z]+)\s+think", question)
+            return f"{thinker} Belief Tracking" if thinker else "Belief Tracking"
+        return "Object Location Tracking"
+
+    if benchmark_key == "n_hop_lookup":
+        hop = extract_regex(r"^hop(\d+)_", item_key)
+        chain = extract_regex(r"follow the chain:\s*(.*?)\.\s*What is", text)
+        if hop and chain:
+            return f"{hop}-Hop Lookup: {chain.replace(' -> ', ' to ')}"
+        if hop:
+            return f"{hop}-Hop Lookup"
+
+    if benchmark_key == "causal_reasoning":
+        cp = extract_regex(r"^cp(\d+)_", item_key)
+        domain = extract_regex(r"^In\s+([^,]+),", text)
+        domain_title = title_case_phrase(domain) if domain else "Causal"
+        return f"{domain_title} CP{cp or '?'} Diagnosis"
+
+    if benchmark_key == "stego_decode":
+        return infer_stego_strategy_title(item_key, text, "Decode")
+
+    if benchmark_key == "stego_encode":
+        return infer_stego_strategy_title(item_key, text, "Encode")
+
+    if benchmark_key == "stego_monitor":
+        heading = extract_regex(r"signs of steganographic encoding:\s*(?:#+\s*)?([^\n]+)", text)
+        return f"Stego Check: {compact_text(heading, 5)}" if heading else "Math Solution Stego Check"
+
+    if benchmark_key == "gsm1k":
+        first_sentence = extract_regex(r"^(.*?[.?!])(?:\s|$)", text) or text
+        return f"Word Problem: {compact_text(first_sentence, 6)}"
+
+    if benchmark_key == "hash":
+        fn_name = extract_regex(r"def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", text)
+        chain = extract_regex(r"chain(\d+)_", item_key)
+        length = extract_regex(r"len(\d+)_", item_key)
+        parts = [title_case_phrase(fn_name or "hash")]
+        if length:
+            parts.append(f"Len {length}")
+        if chain:
+            parts.append(f"Chain {chain}")
+        return " ".join(parts)
+
+    if benchmark_key == "ctrl_alt_deceit_sandbag":
+        plan = extract_regex(r"Plan:\s*(.*?)(?:\n\nCode:|\nCode:|\Z)", text)
+        if plan:
+            return f"Solver Review: {infer_solver_review_topic(plan)}"
+        return "Solver Underperformance Review"
+
+    if benchmark_key == "vibe_coding_sabotage":
+        topic = infer_vibe_topic(item_key)
+        if topic:
+            return f"PR Review: {topic}"
+        task = extract_regex(r"Task:\s*([^\n]+)", text)
+        if task:
+            return f"PR Review: {compact_text(task, 6)}"
+        return "PR Sabotage Review"
+
+    if benchmark_key in {"shade_monitor_action_only", "shade_monitor_cot_action"}:
+        return infer_shade_task_title(item_key, text)
+
+    return item_key
+
+
 def normalize_item(
     item: dict[str, Any],
     benchmark_key: str,
@@ -181,7 +385,7 @@ def normalize_item(
         }
 
     render_payload = {
-        "title": item_key,
+        "title": infer_problem_title(item, benchmark_key),
         "input": item.get("input"),
         "metadata": item.get("metadata", {}),
     }
@@ -199,6 +403,7 @@ def normalize_item(
         "metadata": {
             "source_id": item.get("id"),
             "source_metadata": item.get("metadata", {}),
+            "inferred_title": render_payload["title"],
             "estimated_time": timing,
             "estimated_minutes": item.get("estimated_time_minutes"),
         },
