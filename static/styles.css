@@ -156,7 +156,8 @@ h1 {
     margin-top: auto;
 }
 
-.bike-drawing img {
+.bike-drawing img,
+.bike-drawing video {
     width: auto;
     max-height: 200px; /* Adjust size dynamically */
     object-fit: contain;
@@ -241,7 +242,8 @@ section.recommendations ul li::before {
         flex: 1;
     }
 
-    .bike-drawing img {
+    .bike-drawing img,
+    .bike-drawing video {
         max-height: 80px; /* Resize bike for smaller screens */
     }
 }
