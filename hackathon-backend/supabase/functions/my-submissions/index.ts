@@ -49,7 +49,6 @@ Deno.serve((request) =>
         scoreValue: submission.score_value,
         activeSeconds: submission.active_seconds,
         submittedAt: submission.submitted_at,
-        explanation: submission.explanation,
       })),
     );
   })

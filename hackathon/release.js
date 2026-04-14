@@ -574,7 +574,6 @@ function renderSubmissionResult() {
     <div class="submission-result" role="status">
       <span class="status-pill">${escapeHtml(attemptText)}</span>
       <p>${escapeHtml(message)}</p>
-      ${result.explanation ? `<p>${escapeHtml(result.explanation)}</p>` : ""}
       <div class="inline-actions">
         ${result.canRetry ? `<button class="btn btn--primary" type="button" data-try-again>Try Again</button>` : ""}
         ${result.canRetry ? "" : `<button class="btn btn--secondary" type="button" data-next-problem>Next Problem</button>`}

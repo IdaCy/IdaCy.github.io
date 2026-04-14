@@ -311,7 +311,6 @@ export async function buildFrontendAssignment({
   trackIds?: string[];
 }) {
   const renderPayload = asObject(item.render_payload);
-  const answerKey = asObject(item.answer_key);
   const estimatedMinutes =
     toNumber(asObject(item.metadata).estimated_minutes) ??
     getRangeMedian(asObject(item.metadata).estimated_time) ??
@@ -338,9 +337,6 @@ export async function buildFrontendAssignment({
     answerSpec: normalizeAnswerSpec(renderPayload, benchmark),
     grading: {
       mode: String(benchmark.grading_mode || "pending_manual"),
-      expected: answerKey.expected ?? renderPayload.target ?? null,
-      hiddenLabel: answerKey.hiddenLabel ?? null,
-      referenceThreshold: answerKey.referenceThreshold ?? null,
     },
   };
 }

@@ -155,7 +155,6 @@ Deno.serve((request) =>
       scoreValue: scoring.scoreValue,
       activeSeconds: Number.isFinite(activeSeconds) ? Math.max(0, Math.round(activeSeconds)) : 0,
       submittedAt,
-      explanation: scoring.explanation,
       attemptNumber,
       attemptsRemaining,
       canRetry,
