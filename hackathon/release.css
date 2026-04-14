@@ -42,9 +42,14 @@
   gap: 18px;
 }
 
+.contest-layout > * {
+  min-width: 0;
+}
+
 .contest-app {
   display: grid;
   gap: 18px;
+  min-width: 0;
 }
 
 .contest-toolbar {
@@ -116,6 +121,7 @@
 .problem-card {
   display: grid;
   gap: 18px;
+  min-width: 0;
 }
 
 .important-note ul {
@@ -172,6 +178,7 @@
 .problem-statement {
   display: grid;
   gap: 14px;
+  min-width: 0;
 }
 
 .problem-statement h2,
@@ -200,6 +207,7 @@
 .answer-form {
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .answer-form label {
@@ -344,10 +352,13 @@
 }
 
 .prompt-text {
+  min-width: 0;
   max-width: 100%;
   max-height: 62vh;
   overflow: auto;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--panel);
