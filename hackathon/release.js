@@ -453,7 +453,13 @@ async function handleProblemsLink(event) {
   }
 
   try {
-    await apiFetch("active-assignment", { method: "DELETE" });
+    await apiFetch("active-assignment", {
+      method: "DELETE",
+      body: JSON.stringify({
+        activeSeconds: getActiveSeconds(),
+        startedAt: new Date(getAssignmentStart(state.activeAssignment.id)).toISOString(),
+      }),
+    });
     await returnToProblems("Problem marked as given up. Choose another problem.");
   } catch (error) {
     setError(error);
@@ -546,10 +552,17 @@ function renderAnswerInput(answerSpec) {
   }
 
   return `
-    <label>${escapeHtml(answerSpec?.instruction || "Answer")}
+    <label>${escapeHtml(answerSpec?.instruction || "Enter only the requested final answer. If the problem asks for several values, include all of them in the requested format.")}
       <textarea name="answer" placeholder="${escapeHtml(answerSpec?.placeholder || "")}" required></textarea>
     </label>
   `;
+}
+
+function formatSubmittedAnswer(submission) {
+  if (submission.gradingStatus === "abandoned" && !submission.submittedAnswer) {
+    return "(gave up before submitting)";
+  }
+  return submission.submittedAnswer || "";
 }
 
 function renderSubmissionResult() {
@@ -775,7 +788,7 @@ function renderSubmissionsTable() {
             <td>${escapeHtml(submission.attemptNumber || 1)}</td>
             <td>${formatSeconds(submission.activeSeconds)}</td>
             <td><span class="status-pill">${escapeHtml(submission.gradingStatus)}</span></td>
-            <td class="submission-answer">${escapeHtml(submission.submittedAnswer)}</td>
+            <td class="submission-answer">${escapeHtml(formatSubmittedAnswer(submission))}</td>
           </tr>
         `).join("")}
       </tbody>

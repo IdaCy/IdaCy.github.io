@@ -90,7 +90,7 @@ Deno.serve((request) =>
       const row = leaderboardMap.get(participantId)!;
       row.submissions += 1;
       row.seconds += Number(submission.active_seconds || 0);
-      if (["correct", "incorrect", "recorded_score", "blocked"].includes(submission.grading_status)) {
+      if (["correct", "incorrect", "recorded_score", "blocked", "abandoned"].includes(submission.grading_status)) {
         row.resolved += 1;
       }
       if (submission.grading_status === "correct") {
@@ -130,7 +130,7 @@ Deno.serve((request) =>
       submissionCount: submissions.length,
       uniqueAssignmentsCovered: new Set(submissions.map((row) => row.assignment_id)).size,
       resolvedCount: submissions.filter((row) =>
-        ["correct", "incorrect", "recorded_score", "blocked"].includes(row.grading_status)
+        ["correct", "incorrect", "recorded_score", "blocked", "abandoned"].includes(row.grading_status)
       ).length,
       pendingCount: submissions.filter((row) =>
         ["pending_llm", "pending_manual"].includes(row.grading_status)

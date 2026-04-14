@@ -245,7 +245,7 @@ function normalizeAnswerSpec(
 
   return {
     type: "freeform",
-    instruction: "Enter your answer.",
+    instruction: "Enter only the requested final answer. If the problem asks for several values, include all of them in the requested format.",
     placeholder: "Type your answer here",
   };
 }
