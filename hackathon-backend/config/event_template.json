@@ -24,8 +24,7 @@
         "sally_anne",
         "n_hop_lookup",
         "causal_reasoning",
-        "stego_decode",
-        "chess_puzzles"
+        "stego_decode"
       ]
     },
     {
@@ -35,9 +34,7 @@
       "requires_backend": false,
       "benchmark_keys": [
         "ctrl_alt_deceit_sandbag",
-        "vibe_coding_sabotage",
-        "shade_monitor_action_only",
-        "shade_monitor_cot_action"
+        "vibe_coding_sabotage"
       ]
     },
     {

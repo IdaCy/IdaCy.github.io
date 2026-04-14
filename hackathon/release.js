@@ -1,4 +1,9 @@
 const TIMER_KEY_PREFIX = "time-horizons-assignment-started-at:";
+const EXCLUDED_BENCHMARK_IDS = new Set([
+  "chess_puzzles",
+  "shade_monitor_action_only",
+  "shade_monitor_cot_action",
+]);
 
 const state = {
   client: null,
@@ -155,9 +160,14 @@ function assignmentStartKey(assignmentId) {
   return `${TIMER_KEY_PREFIX}${assignmentId}`;
 }
 
-function getAssignmentStart(assignmentId) {
+function getAssignmentStart(assignmentId, claimedAt = null) {
   if (!assignmentId) {
     return Date.now();
+  }
+  const claimedAtMs = Date.parse(claimedAt || "");
+  if (Number.isFinite(claimedAtMs) && claimedAtMs > 0) {
+    window.localStorage.setItem(assignmentStartKey(assignmentId), String(claimedAtMs));
+    return claimedAtMs;
   }
   const key = assignmentStartKey(assignmentId);
   const existing = Number(window.localStorage.getItem(key));
@@ -167,6 +177,13 @@ function getAssignmentStart(assignmentId) {
   const now = Date.now();
   window.localStorage.setItem(key, String(now));
   return now;
+}
+
+function getActiveAssignmentStart() {
+  if (!state.activeAssignment) {
+    return Date.now();
+  }
+  return getAssignmentStart(state.activeAssignment.id, state.activeAssignment.claimedAt);
 }
 
 function getActiveSeconds() {
@@ -180,7 +197,7 @@ function getActiveSeconds() {
   ) {
     return Math.max(0, Math.round(Number(state.submissionResult.activeSeconds)));
   }
-  return Math.max(0, Math.round((Date.now() - getAssignmentStart(state.activeAssignment.id)) / 1000));
+  return Math.max(0, Math.round((Date.now() - getActiveAssignmentStart()) / 1000));
 }
 
 async function apiFetch(endpoint, options = {}) {
@@ -352,6 +369,11 @@ async function handleRegister(event) {
 }
 
 async function handleStartProblem(benchmarkId, itemId) {
+  if (EXCLUDED_BENCHMARK_IDS.has(String(benchmarkId))) {
+    setError("That problem is not available for this event.");
+    render();
+    return;
+  }
   try {
     const assignment = await apiFetch("claim-assignment", {
       method: "POST",
@@ -363,7 +385,7 @@ async function handleStartProblem(benchmarkId, itemId) {
     state.activeAssignment = assignment || null;
     state.submissionResult = null;
     if (assignment) {
-      getAssignmentStart(assignment.id);
+      getAssignmentStart(assignment.id, assignment.claimedAt);
       setMessage("Problem started. Your timer is running.");
       await loadContestData();
       state.activeAssignment = assignment;
@@ -394,7 +416,7 @@ async function handleSubmit(event) {
         assignmentId: state.activeAssignment.id,
         answer,
         activeSeconds,
-        startedAt: new Date(getAssignmentStart(state.activeAssignment.id)).toISOString(),
+        startedAt: new Date(getActiveAssignmentStart()).toISOString(),
       }),
     });
     state.submissionResult = submission;
@@ -457,7 +479,7 @@ async function handleProblemsLink(event) {
       method: "DELETE",
       body: JSON.stringify({
         activeSeconds: getActiveSeconds(),
-        startedAt: new Date(getAssignmentStart(state.activeAssignment.id)).toISOString(),
+        startedAt: new Date(getActiveAssignmentStart()).toISOString(),
       }),
     });
     await returnToProblems("Problem marked as given up. Choose another problem.");
@@ -652,7 +674,10 @@ function groupCatalogByDomain(catalog) {
 }
 
 function renderProblemList() {
-  const visibleCatalog = state.catalog.filter((benchmark) => benchmark.visibility !== "private" || state.participant?.canAccessPrivate);
+  const visibleCatalog = state.catalog.filter((benchmark) =>
+    !EXCLUDED_BENCHMARK_IDS.has(String(benchmark.id)) &&
+    (benchmark.visibility !== "private" || state.participant?.canAccessPrivate)
+  );
   if (!visibleCatalog.length) {
     return `<div class="submission-empty">No problems are available for this account yet.</div>`;
   }

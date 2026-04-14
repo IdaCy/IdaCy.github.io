@@ -261,6 +261,34 @@ def main() -> None:
         )
     lines.append("")
 
+    for benchmark_key, benchmark in benchmark_by_key.items():
+        if benchmark_key in enabled_benchmark_keys:
+            continue
+        lines.append(
+            "insert into public.event_benchmark_configs ("
+            "event_id, benchmark_id, enabled, requires_backend, sampling_strategy, target_assignments,"
+            " max_assignments_per_participant, priority_override, notes_override, config"
+            ") values ("
+            f"(select id from public.events where slug = {sql_quote(event['slug'])}),"
+            f" (select id from public.benchmarks where benchmark_key = {sql_quote(benchmark_key)}),"
+            " false,"
+            " false,"
+            " 'disabled',"
+            " 0,"
+            " 1,"
+            f" {sql_quote(benchmark.get('priority'))},"
+            " 'Disabled for this event.',"
+            f" {sql_quote({'disabled_by_event_config': True})}"
+            ") on conflict (event_id, benchmark_id) do update set"
+            " enabled = false,"
+            " requires_backend = false,"
+            " sampling_strategy = 'disabled',"
+            " target_assignments = 0,"
+            " notes_override = excluded.notes_override,"
+            " config = excluded.config;"
+        )
+    lines.append("")
+
     for item in items:
         benchmark_key = item["benchmark_key"]
         if benchmark_key not in enabled_benchmark_keys:

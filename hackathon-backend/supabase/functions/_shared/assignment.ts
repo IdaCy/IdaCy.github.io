@@ -328,6 +328,7 @@ export async function buildFrontendAssignment({
     id: String(assignment.id),
     benchmarkId: String(benchmark.benchmark_key),
     itemId: String(item.item_key),
+    claimedAt: assignment.claimed_at ? String(assignment.claimed_at) : null,
     title,
     visibility: itemVisibility,
     availability: "api",

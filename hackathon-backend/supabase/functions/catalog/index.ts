@@ -9,6 +9,12 @@ function asObject(value: unknown): Record<string, unknown> {
     : {};
 }
 
+const EXCLUDED_BENCHMARK_KEYS = new Set([
+  "chess_puzzles",
+  "shade_monitor_action_only",
+  "shade_monitor_cot_action",
+]);
+
 Deno.serve((request) =>
   withRequestPolicy(request, { endpoint: "catalog", limit: 60, windowSeconds: 300 }, async () => {
     if (request.method !== "GET") {
@@ -71,8 +77,11 @@ Deno.serve((request) =>
 
     const payload = (benchmarksResult.data || [])
       .filter((benchmark) => {
+        if (EXCLUDED_BENCHMARK_KEYS.has(String(benchmark.benchmark_key))) {
+          return false;
+        }
         const config = configByBenchmarkId.get(benchmark.id);
-        if (!(config ? config.enabled !== false : true)) {
+        if (!config || config.enabled === false) {
           return false;
         }
         if (benchmark.visibility === "private" && !canAccessPrivate) {

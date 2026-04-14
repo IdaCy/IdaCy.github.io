@@ -31,12 +31,14 @@ Deno.serve((request) =>
 
       const payload = await readOptionalJson(request);
       const activeSeconds = Number(payload.activeSeconds || 0);
-      const startedAt = String(payload.startedAt || assignment.claimed_at || "").trim() || null;
+      const startedAt = String(assignment.claimed_at || payload.startedAt || "").trim() || null;
       const abandonedAt = new Date().toISOString();
       const startedAtTime = startedAt ? Date.parse(startedAt) : NaN;
       const wallClockSeconds = Number.isFinite(startedAtTime)
         ? Math.max(0, Math.round((Date.parse(abandonedAt) - startedAtTime) / 1000))
         : null;
+      const clientActiveSeconds = Number.isFinite(activeSeconds) ? Math.max(0, Math.round(activeSeconds)) : 0;
+      const canonicalActiveSeconds = wallClockSeconds ?? clientActiveSeconds;
 
       const priorSubmissionsResult = await serviceClient
         .from("submissions")
@@ -64,8 +66,11 @@ Deno.serve((request) =>
           raw_payload: {
             ...payload,
             abandoned: true,
+            clientActiveSeconds,
+            clientStartedAt: payload.startedAt || null,
+            canonicalStartedAt: startedAt,
           },
-          active_seconds: Number.isFinite(activeSeconds) ? Math.max(0, Math.round(activeSeconds)) : 0,
+          active_seconds: canonicalActiveSeconds,
           wall_clock_seconds: wallClockSeconds,
           started_at: startedAt,
           submitted_at: abandonedAt,

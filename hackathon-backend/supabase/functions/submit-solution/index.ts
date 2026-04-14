@@ -61,7 +61,7 @@ Deno.serve((request) =>
       throw new HttpError(409, "You have already used all 3 attempts for this problem.");
     }
 
-    const startedAt = String(payload.startedAt || assignment.claimed_at || "").trim() || null;
+    const startedAt = String(assignment.claimed_at || payload.startedAt || "").trim() || null;
     const { benchmark, item } = await loadBenchmarkAndItem(serviceClient, assignment);
     const answerKey = (item.answer_key || {}) as Record<string, unknown>;
     const scoring = scoreSubmission({
@@ -77,6 +77,8 @@ Deno.serve((request) =>
     const wallClockSeconds = Number.isFinite(startedAtTime)
       ? Math.max(0, Math.round((Date.parse(submittedAt) - startedAtTime) / 1000))
       : null;
+    const clientActiveSeconds = Number.isFinite(activeSeconds) ? Math.max(0, Math.round(activeSeconds)) : 0;
+    const canonicalActiveSeconds = wallClockSeconds ?? clientActiveSeconds;
     const successful = isSuccessful(scoring);
     const attemptsRemaining = Math.max(0, 3 - attemptNumber);
     const canRetry = !successful && scoring.gradingStatus === "incorrect" && attemptsRemaining > 0;
@@ -92,8 +94,13 @@ Deno.serve((request) =>
         benchmark_id: benchmark.id,
         benchmark_item_id: item.id,
         submitted_answer: answer,
-        raw_payload: payload,
-        active_seconds: Number.isFinite(activeSeconds) ? Math.max(0, Math.round(activeSeconds)) : 0,
+        raw_payload: {
+          ...payload,
+          clientActiveSeconds,
+          clientStartedAt: payload.startedAt || null,
+          canonicalStartedAt: startedAt,
+        },
+        active_seconds: canonicalActiveSeconds,
         wall_clock_seconds: wallClockSeconds,
         started_at: startedAt,
         submitted_at: submittedAt,
@@ -153,7 +160,8 @@ Deno.serve((request) =>
       submittedAnswer: answer,
       gradingStatus: scoring.gradingStatus,
       scoreValue: scoring.scoreValue,
-      activeSeconds: Number.isFinite(activeSeconds) ? Math.max(0, Math.round(activeSeconds)) : 0,
+      activeSeconds: canonicalActiveSeconds,
+      wallClockSeconds,
       submittedAt,
       attemptNumber,
       attemptsRemaining,

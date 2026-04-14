@@ -6,6 +6,12 @@ import { requireParticipant } from "../_shared/auth.ts";
 import { HttpError, json, readJson } from "../_shared/http.ts";
 import { withRequestPolicy } from "../_shared/policy.ts";
 
+const EXCLUDED_BENCHMARK_KEYS = new Set([
+  "chess_puzzles",
+  "shade_monitor_action_only",
+  "shade_monitor_cot_action",
+]);
+
 Deno.serve((request) =>
   withRequestPolicy(request, { endpoint: "claim-assignment", limit: 90, windowSeconds: 300 }, async () => {
     if (request.method !== "POST") {
@@ -32,6 +38,22 @@ Deno.serve((request) =>
     }
     if (!benchmarkResult.data) {
       throw new HttpError(404, "Benchmark not found.");
+    }
+    if (EXCLUDED_BENCHMARK_KEYS.has(String(benchmarkResult.data.benchmark_key))) {
+      throw new HttpError(404, "Problem not found.");
+    }
+    const configResult = await serviceClient
+      .from("event_benchmark_configs")
+      .select("enabled")
+      .eq("event_id", event.id)
+      .eq("benchmark_id", benchmarkResult.data.id)
+      .maybeSingle();
+
+    if (configResult.error) {
+      throw new HttpError(500, "Failed to resolve event benchmark configuration.", configResult.error);
+    }
+    if (!configResult.data || configResult.data.enabled === false) {
+      throw new HttpError(404, "Problem not found.");
     }
     if (benchmarkResult.data.visibility === "private" && !canAccessPrivate) {
       throw new HttpError(403, "This participant is not allowed to access this private benchmark.");
