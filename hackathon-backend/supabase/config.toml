@@ -1,0 +1,53 @@
+project_id = "REPLACE_WITH_SUPABASE_PROJECT_ID"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[functions.catalog]
+verify_jwt = false
+
+[functions.tracks]
+verify_jwt = false
+
+[functions.live-stats]
+verify_jwt = false
+
+[functions.participant]
+verify_jwt = false
+
+[functions.register-participant]
+verify_jwt = false
+
+[functions.active-assignment]
+verify_jwt = false
+
+[functions.claim-assignment]
+verify_jwt = false
+
+[functions.get-task-payload]
+verify_jwt = false
+
+[functions.submit-solution]
+verify_jwt = false
+
+[functions.my-submissions]
+verify_jwt = false
+
+[functions.submissions]
+verify_jwt = false
+
+[functions.admin-reset]
+verify_jwt = false

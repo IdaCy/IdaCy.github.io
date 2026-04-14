@@ -1,0 +1,54 @@
+{
+  "monitor_training_poisoning": {
+    "visibility": "private",
+    "priority": "launch",
+    "frontend_mode": "backend_only",
+    "grading_mode": "instant_exact",
+    "notes": "Treat as protected in the hackathon app even if a local checkout still marks it public."
+  },
+  "strategic_scheming_numeric": {
+    "priority": "launch",
+    "frontend_mode": "direct",
+    "grading_mode": "instant_exact"
+  },
+  "stego_monitor": {
+    "priority": "launch",
+    "frontend_mode": "direct",
+    "grading_mode": "instant_exact"
+  },
+  "test_case_prediction": {
+    "priority": "sample_first",
+    "frontend_mode": "direct",
+    "grading_mode": "instant_exact"
+  },
+  "ctrl_alt_deceit_sandbag": {
+    "priority": "sample_first",
+    "frontend_mode": "direct",
+    "grading_mode": "score_only"
+  },
+  "vibe_coding_sabotage": {
+    "priority": "sample_first",
+    "frontend_mode": "direct",
+    "grading_mode": "score_only"
+  },
+  "a_level_mcq": {
+    "priority": "sample_first",
+    "frontend_mode": "direct",
+    "grading_mode": "async_llm"
+  },
+  "a_level_text": {
+    "priority": "sample_first",
+    "frontend_mode": "direct",
+    "grading_mode": "async_llm"
+  },
+  "a_level_image": {
+    "priority": "follow_up",
+    "frontend_mode": "backend_or_signed_assets",
+    "grading_mode": "async_llm"
+  },
+  "terminal_bench": {
+    "priority": "special_case",
+    "frontend_mode": "external_environment",
+    "grading_mode": "agentic_external_env"
+  }
+}

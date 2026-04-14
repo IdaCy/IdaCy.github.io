@@ -1,2 +1,5 @@
 *xx*
-/hackathon-backend/
+__pycache__/
+/hackathon-backend/scripts/__pycache__/
+/hackathon/hackathon-config.local.js
+/hackathon-backend/.env

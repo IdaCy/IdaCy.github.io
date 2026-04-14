@@ -1,0 +1,4 @@
+email,role,allow_private_tracks,team,affiliation,status
+ida@example.org,participant,true,Private Core,Imperial College London,invited
+reviewer@example.org,participant,false,Review Track,Independent,invited
+admin@example.org,admin,true,Admin,Operations,invited

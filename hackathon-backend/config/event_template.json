@@ -1,0 +1,63 @@
+{
+  "event": {
+    "slug": "spring-2026-baseline-drive",
+    "name": "Spring 2026 Baseline Drive",
+    "subtitle": "Initial hackathon for tasks without real human baselines",
+    "description": "Collect human timing baselines and outcome data for benchmarks that currently only carry estimated horizons.",
+    "status": "planning_or_mock",
+    "starts_at": null,
+    "ends_at": null,
+    "default_assignments_per_item": 5
+  },
+  "tracks": [
+    {
+      "track_key": "launch-exact",
+      "title": "Launch Track: exact-answer sprint",
+      "description": "Immediate-score public tasks for the first event.",
+      "requires_backend": false,
+      "benchmark_keys": [
+        "strategic_scheming_numeric",
+        "stego_monitor",
+        "test_case_prediction",
+        "gsm1k",
+        "hash",
+        "sally_anne",
+        "n_hop_lookup",
+        "causal_reasoning",
+        "stego_decode",
+        "chess_puzzles"
+      ]
+    },
+    {
+      "track_key": "review-detection",
+      "title": "Review Track: monitoring and sabotage detection",
+      "description": "Score-style monitoring tasks where live stats should emphasize separation rather than thresholded accuracy.",
+      "requires_backend": false,
+      "benchmark_keys": [
+        "ctrl_alt_deceit_sandbag",
+        "vibe_coding_sabotage",
+        "shade_monitor_action_only",
+        "shade_monitor_cot_action"
+      ]
+    },
+    {
+      "track_key": "llm-graded",
+      "title": "LLM-Graded Track",
+      "description": "Public tasks that need a fixed grader model and async job processing.",
+      "requires_backend": false,
+      "benchmark_keys": [
+        "stego_encode",
+        "strategic_scheming_open_ended"
+      ]
+    },
+    {
+      "track_key": "private-core",
+      "title": "Private Core Track",
+      "description": "Protected-task queue for non-public benchmarks.",
+      "requires_backend": true,
+      "benchmark_keys": [
+        "monitor_training_poisoning"
+      ]
+    }
+  ]
+}
