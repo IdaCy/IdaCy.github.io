@@ -326,15 +326,47 @@ function handleTryAgain() {
   render();
 }
 
+async function returnToProblems(message) {
+  if (state.activeAssignment) {
+    window.localStorage.removeItem(assignmentStartKey(state.activeAssignment.id));
+  }
+  state.activeAssignment = null;
+  state.submissionResult = null;
+  setMessage(message);
+  await loadContestData();
+}
+
 async function handleNextProblem() {
   try {
-    if (state.activeAssignment) {
-      window.localStorage.removeItem(assignmentStartKey(state.activeAssignment.id));
-    }
-    state.activeAssignment = null;
-    state.submissionResult = null;
-    setMessage("Choose another problem.");
-    await loadContestData();
+    await returnToProblems("Choose another problem.");
+  } catch (error) {
+    setError(error);
+  }
+  render();
+}
+
+async function handleProblemsLink(event) {
+  if (!state.activeAssignment) {
+    return;
+  }
+
+  event.preventDefault();
+
+  if (state.submissionResult && !state.submissionResult.canRetry) {
+    await handleNextProblem();
+    return;
+  }
+
+  const confirmed = window.confirm(
+    "Confirm you're going back to the main page? That means giving up on this problem. It's fine, but FYI!",
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    await apiFetch("active-assignment", { method: "DELETE" });
+    await returnToProblems("Problem marked as given up. Choose another problem.");
   } catch (error) {
     setError(error);
   }
@@ -741,6 +773,7 @@ function bind(root) {
   root.querySelector("[data-answer-form]")?.addEventListener("submit", handleSubmit);
   root.querySelector("[data-try-again]")?.addEventListener("click", handleTryAgain);
   root.querySelector("[data-next-problem]")?.addEventListener("click", handleNextProblem);
+  root.querySelector("[data-problems-link]")?.addEventListener("click", handleProblemsLink);
   root.querySelectorAll("[data-start-problem]").forEach((button) => {
     button.addEventListener("click", () => handleStartProblem(button.dataset.benchmarkId, button.dataset.itemId));
   });

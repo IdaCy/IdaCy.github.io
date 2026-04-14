@@ -17,18 +17,18 @@ Deno.serve((request) =>
         return json(null);
       }
 
-      const releaseResult = await serviceClient
+      const abandonResult = await serviceClient
         .from("assignments")
         .update({
-          status: "released",
-          participant_id: null,
-          released_at: new Date().toISOString(),
+          status: "abandoned",
+          submitted_at: new Date().toISOString(),
         })
         .eq("id", assignment.id)
-        .eq("participant_id", String(participant.id));
+        .eq("participant_id", String(participant.id))
+        .eq("status", "claimed");
 
-      if (releaseResult.error) {
-        throw new HttpError(500, "Failed to release active assignment.", releaseResult.error);
+      if (abandonResult.error) {
+        throw new HttpError(500, "Failed to abandon active problem.", abandonResult.error);
       }
 
       return json(null);
