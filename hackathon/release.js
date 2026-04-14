@@ -773,11 +773,16 @@ function bind(root) {
   root.querySelector("[data-answer-form]")?.addEventListener("submit", handleSubmit);
   root.querySelector("[data-try-again]")?.addEventListener("click", handleTryAgain);
   root.querySelector("[data-next-problem]")?.addEventListener("click", handleNextProblem);
-  root.querySelector("[data-problems-link]")?.addEventListener("click", handleProblemsLink);
   root.querySelectorAll("[data-start-problem]").forEach((button) => {
     button.addEventListener("click", () => handleStartProblem(button.dataset.benchmarkId, button.dataset.itemId));
   });
   root.querySelector("[data-sign-out]")?.addEventListener("click", handleSignOut);
+}
+
+function bindGlobalNav() {
+  document.querySelectorAll("[data-problems-link]").forEach((link) => {
+    link.addEventListener("click", handleProblemsLink);
+  });
 }
 
 function render() {
@@ -809,6 +814,7 @@ function render() {
   }
 }
 
+bindGlobalNav();
 boot().catch((error) => {
   setError(error);
   render();
