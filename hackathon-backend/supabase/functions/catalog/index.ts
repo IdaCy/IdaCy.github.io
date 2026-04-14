@@ -2,19 +2,34 @@ import { requireParticipant } from "../_shared/auth.ts";
 import { json, HttpError } from "../_shared/http.ts";
 import { withRequestPolicy } from "../_shared/policy.ts";
 
+function asObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 Deno.serve((request) =>
   withRequestPolicy(request, { endpoint: "catalog", limit: 60, windowSeconds: 300 }, async () => {
     if (request.method !== "GET") {
       throw new HttpError(405, "Use GET for catalog.");
     }
 
-    const { event, serviceClient, canAccessPrivate } = await requireParticipant(request);
+    const { event, participant, serviceClient, canAccessPrivate } = await requireParticipant(request);
 
-    const [benchmarksResult, configsResult] = await Promise.all([
+    const [benchmarksResult, configsResult, itemsResult, assignmentsResult, submissionsResult] = await Promise.all([
       serviceClient.from("benchmarks").select("*").order("title"),
       serviceClient
         .from("event_benchmark_configs")
         .select("*")
+        .eq("event_id", event.id),
+      serviceClient.from("benchmark_items").select("*").order("item_key"),
+      serviceClient
+        .from("assignments")
+        .select("id, benchmark_id, benchmark_item_id, participant_id, status")
+        .eq("event_id", event.id),
+      serviceClient
+        .from("submissions")
+        .select("id, benchmark_id, benchmark_item_id, participant_id, grading_status, score_value")
         .eq("event_id", event.id),
     ]);
 
@@ -24,10 +39,31 @@ Deno.serve((request) =>
     if (configsResult.error) {
       throw configsResult.error;
     }
+    if (itemsResult.error) {
+      throw itemsResult.error;
+    }
+    if (assignmentsResult.error) {
+      throw assignmentsResult.error;
+    }
+    if (submissionsResult.error) {
+      throw submissionsResult.error;
+    }
 
     const configByBenchmarkId = new Map(
       (configsResult.data || []).map((row) => [row.benchmark_id, row]),
     );
+    const assignments = assignmentsResult.data || [];
+    const submissions = submissionsResult.data || [];
+    const participantId = String(participant.id);
+
+    const itemsByBenchmarkId = new Map<string, Record<string, unknown>[]>();
+    for (const item of itemsResult.data || []) {
+      const benchmarkId = String(item.benchmark_id);
+      if (!itemsByBenchmarkId.has(benchmarkId)) {
+        itemsByBenchmarkId.set(benchmarkId, []);
+      }
+      itemsByBenchmarkId.get(benchmarkId)!.push(item);
+    }
 
     const payload = (benchmarksResult.data || [])
       .filter((benchmark) => {
@@ -42,6 +78,7 @@ Deno.serve((request) =>
       })
       .map((benchmark) => {
         const config = configByBenchmarkId.get(benchmark.id);
+        const benchmarkItems = itemsByBenchmarkId.get(String(benchmark.id)) || [];
         return {
           id: benchmark.benchmark_key,
           title: benchmark.title,
@@ -59,6 +96,30 @@ Deno.serve((request) =>
           totalEstimatedHours: benchmark.total_estimated_hours,
           priority: config?.priority_override || benchmark.priority,
           notes: config?.notes_override || benchmark.notes || "",
+          problems: benchmarkItems.map((item) => {
+            const renderPayload = asObject(item.render_payload);
+            const metadata = asObject(item.metadata);
+            const itemId = String(item.id);
+            const itemAssignments = assignments.filter((assignment) => String(assignment.benchmark_item_id) === itemId);
+            const itemSubmissions = submissions.filter((submission) => String(submission.benchmark_item_id) === itemId);
+            const participantAssignment = itemAssignments.find(
+              (assignment) => String(assignment.participant_id || "") === participantId,
+            );
+            const participantSubmission = itemSubmissions.find(
+              (submission) => String(submission.participant_id || "") === participantId,
+            );
+            return {
+              id: item.item_key,
+              title: renderPayload.title || item.item_key,
+              estimatedMinutes: metadata.estimated_minutes ?? asObject(metadata.estimated_time).median ?? null,
+              attempted: itemAssignments.filter((assignment) => assignment.participant_id).length,
+              successes: itemSubmissions.length,
+              startedByMe: Boolean(participantAssignment),
+              submittedByMe: Boolean(participantSubmission),
+              myAssignmentId: participantAssignment?.id || null,
+              myStatus: participantSubmission?.grading_status || participantAssignment?.status || null,
+            };
+          }),
         };
       });
 

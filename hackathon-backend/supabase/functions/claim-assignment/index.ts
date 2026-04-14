@@ -1,6 +1,5 @@
 import {
   buildFrontendAssignment,
-  fetchCurrentAssignment,
   loadBenchmarkAndItem,
 } from "../_shared/assignment.ts";
 import { requireParticipant } from "../_shared/auth.ts";
@@ -8,127 +7,81 @@ import { HttpError, json, readJson } from "../_shared/http.ts";
 import { withRequestPolicy } from "../_shared/policy.ts";
 
 Deno.serve((request) =>
-  withRequestPolicy(request, { endpoint: "claim-assignment", limit: 45, windowSeconds: 300 }, async () => {
+  withRequestPolicy(request, { endpoint: "claim-assignment", limit: 90, windowSeconds: 300 }, async () => {
     if (request.method !== "POST") {
-      throw new HttpError(405, "Use POST for claiming assignments.");
+      throw new HttpError(405, "Use POST for starting a problem.");
     }
 
     const { event, participant, serviceClient, canAccessPrivate } = await requireParticipant(request);
-    const existing = await fetchCurrentAssignment(serviceClient, String(event.id), String(participant.id));
-    if (existing) {
-      const { benchmark, item } = await loadBenchmarkAndItem(serviceClient, existing);
-      return json(await buildFrontendAssignment({ serviceClient, assignment: existing, benchmark, item }));
-    }
-
     const payload = await readJson(request);
-    const trackId = String(payload.trackId || "").trim();
-    const preferredBenchmarkKey = String(payload.benchmarkId || "").trim();
+    const benchmarkKey = String(payload.benchmarkId || "").trim();
+    const itemKey = String(payload.itemId || "").trim();
 
-    let benchmarkKeys: string[] = [];
-    if (trackId) {
-      const trackResult = await serviceClient
-        .from("event_tracks")
-        .select("*")
-        .eq("event_id", event.id)
-        .eq("track_key", trackId)
-        .maybeSingle();
-
-      if (trackResult.error) {
-        throw new HttpError(500, "Failed to resolve requested track.", trackResult.error);
-      }
-
-      if (trackResult.data?.requires_backend && !canAccessPrivate) {
-        throw new HttpError(403, "This participant is not allowed to access private tracks.");
-      }
-
-      if (trackResult.data && Array.isArray(trackResult.data.benchmark_keys)) {
-        benchmarkKeys = [...trackResult.data.benchmark_keys];
-      }
+    if (!benchmarkKey || !itemKey) {
+      throw new HttpError(400, "benchmarkId and itemId are required.");
     }
 
-    if (preferredBenchmarkKey) {
-      benchmarkKeys = [
-        preferredBenchmarkKey,
-        ...benchmarkKeys.filter((key) => key !== preferredBenchmarkKey),
-      ];
-    }
-
-    if (benchmarkKeys.length === 0) {
-      const fallbackTracks = await serviceClient
-        .from("event_tracks")
-        .select("*")
-        .eq("event_id", event.id)
-        .order("sort_order", { ascending: true })
-        .limit(1);
-
-      if (fallbackTracks.error) {
-        throw new HttpError(500, "Failed to determine fallback track.", fallbackTracks.error);
-      }
-
-      const firstTrack = fallbackTracks.data?.[0];
-      benchmarkKeys = Array.isArray(firstTrack?.benchmark_keys) ? firstTrack.benchmark_keys : [];
-    }
-
-    const benchmarksResult = await serviceClient
+    const benchmarkResult = await serviceClient
       .from("benchmarks")
       .select("id, benchmark_key, visibility")
-      .in("benchmark_key", benchmarkKeys);
+      .eq("benchmark_key", benchmarkKey)
+      .maybeSingle();
 
-    if (benchmarksResult.error) {
-      throw new HttpError(500, "Failed to load benchmark ids for the requested track.", benchmarksResult.error);
+    if (benchmarkResult.error) {
+      throw new HttpError(500, "Failed to resolve requested benchmark.", benchmarkResult.error);
+    }
+    if (!benchmarkResult.data) {
+      throw new HttpError(404, "Benchmark not found.");
+    }
+    if (benchmarkResult.data.visibility === "private" && !canAccessPrivate) {
+      throw new HttpError(403, "This participant is not allowed to access this private benchmark.");
     }
 
-    const benchmarkIdByKey = new Map(
-      (benchmarksResult.data || [])
-        .filter((row) => canAccessPrivate || row.visibility !== "private")
-        .map((row) => [row.benchmark_key, row.id]),
-    );
+    const itemResult = await serviceClient
+      .from("benchmark_items")
+      .select("id")
+      .eq("benchmark_id", benchmarkResult.data.id)
+      .eq("item_key", itemKey)
+      .maybeSingle();
 
-    const orderedBenchmarkIds = benchmarkKeys
-      .map((key) => benchmarkIdByKey.get(key))
-      .filter(Boolean);
+    if (itemResult.error) {
+      throw new HttpError(500, "Failed to resolve requested problem.", itemResult.error);
+    }
+    if (!itemResult.data) {
+      throw new HttpError(404, "Problem not found.");
+    }
 
-    const priorSubmissionsResult = await serviceClient
-      .from("submissions")
-      .select("benchmark_item_id")
+    const existingAttemptResult = await serviceClient
+      .from("assignments")
+      .select("*")
       .eq("event_id", event.id)
-      .eq("participant_id", participant.id);
+      .eq("benchmark_item_id", itemResult.data.id)
+      .eq("participant_id", participant.id)
+      .maybeSingle();
 
-    if (priorSubmissionsResult.error) {
-      throw new HttpError(500, "Failed to load prior participant submissions.", priorSubmissionsResult.error);
+    if (existingAttemptResult.error) {
+      throw new HttpError(500, "Failed to check whether you already started this problem.", existingAttemptResult.error);
+    }
+    if (existingAttemptResult.data) {
+      throw new HttpError(409, "You have already started this problem, so it cannot be started again.");
     }
 
-    const completedItemIds = new Set(
-      (priorSubmissionsResult.data || []).map((row) => String(row.benchmark_item_id)),
-    );
+    const assignmentResult = await serviceClient
+      .from("assignments")
+      .select("*")
+      .eq("event_id", event.id)
+      .eq("benchmark_item_id", itemResult.data.id)
+      .in("status", ["queued", "released"])
+      .is("participant_id", null)
+      .order("assignment_slot", { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-    let selectedAssignment: Record<string, unknown> | null = null;
-    for (const benchmarkId of orderedBenchmarkIds) {
-      const assignmentResult = await serviceClient
-        .from("assignments")
-        .select("*")
-        .eq("event_id", event.id)
-        .eq("benchmark_id", benchmarkId)
-        .in("status", ["queued", "released"])
-        .is("participant_id", null)
-        .order("created_at", { ascending: true })
-        .limit(50);
-
-      if (assignmentResult.error) {
-        throw new HttpError(500, "Failed to look up an available assignment.", assignmentResult.error);
-      }
-
-      selectedAssignment = (assignmentResult.data || []).find(
-        (row) => !completedItemIds.has(String(row.benchmark_item_id)),
-      ) || null;
-
-      if (selectedAssignment) {
-        break;
-      }
+    if (assignmentResult.error) {
+      throw new HttpError(500, "Failed to find an available assignment slot.", assignmentResult.error);
     }
-
-    if (!selectedAssignment) {
-      return json(null);
+    if (!assignmentResult.data) {
+      throw new HttpError(409, "No attempt slots remain for this problem.");
     }
 
     const claimResult = await serviceClient
@@ -139,17 +92,17 @@ Deno.serve((request) =>
         claimed_at: new Date().toISOString(),
         released_at: null,
       })
-      .eq("id", selectedAssignment.id)
+      .eq("id", assignmentResult.data.id)
       .in("status", ["queued", "released"])
       .is("participant_id", null)
       .select("*")
       .maybeSingle();
 
     if (claimResult.error) {
-      throw new HttpError(500, "Failed to claim assignment.", claimResult.error);
+      throw new HttpError(500, "Failed to start problem.", claimResult.error);
     }
     if (!claimResult.data) {
-      return json(null);
+      throw new HttpError(409, "This problem was just started by someone else. Choose another one.");
     }
 
     const { benchmark, item } = await loadBenchmarkAndItem(serviceClient, claimResult.data);
@@ -159,7 +112,6 @@ Deno.serve((request) =>
         assignment: claimResult.data,
         benchmark,
         item,
-        trackIds: trackId ? [trackId] : [],
       }),
     );
   })

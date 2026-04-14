@@ -4,13 +4,10 @@ const state = {
   client: null,
   session: null,
   participant: null,
-  tracks: [],
   catalog: [],
   activeAssignment: null,
   stats: null,
   submissions: [],
-  selectedTrackId: "",
-  selectedBenchmarkId: "",
   timerId: null,
   message: "",
   error: "",
@@ -132,21 +129,16 @@ async function loadContestData() {
   if (!state.participant) {
     return;
   }
-  const [tracks, catalog, activeAssignment, submissions, stats] = await Promise.all([
-    apiFetch("tracks"),
+  const [catalog, activeAssignment, submissions, stats] = await Promise.all([
     apiFetch("catalog"),
     apiFetch("active-assignment"),
     apiFetch("my-submissions"),
     apiFetch("live-stats"),
   ]);
-  state.tracks = tracks || [];
   state.catalog = catalog || [];
   state.activeAssignment = activeAssignment || null;
   state.submissions = submissions || [];
   state.stats = stats || null;
-  if (!state.selectedTrackId && state.tracks[0]) {
-    state.selectedTrackId = state.tracks[0].id;
-  }
 }
 
 async function boot() {
@@ -262,36 +254,24 @@ async function handleRegister(event) {
   render();
 }
 
-async function handleClaim(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
+async function handleStartProblem(benchmarkId, itemId) {
   try {
     const assignment = await apiFetch("claim-assignment", {
       method: "POST",
       body: JSON.stringify({
-        trackId: form.trackId.value,
-        benchmarkId: form.benchmarkId.value,
+        benchmarkId,
+        itemId,
       }),
     });
     state.activeAssignment = assignment || null;
     if (assignment) {
       getAssignmentStart(assignment.id);
-      setMessage("Task claimed. Submit once you are done.");
+      setMessage("Problem started. Your timer is running.");
+      await loadContestData();
+      state.activeAssignment = assignment;
     } else {
-      setMessage("No task is currently available for that selection.");
+      setMessage("No attempt slot is currently available for that problem.");
     }
-  } catch (error) {
-    setError(error);
-  }
-  render();
-}
-
-async function handleReleaseAssignment() {
-  try {
-    await apiFetch("active-assignment", { method: "DELETE" });
-    state.activeAssignment = null;
-    setMessage("Task released.");
-    await loadContestData();
   } catch (error) {
     setError(error);
   }
@@ -439,7 +419,7 @@ function renderAssignment() {
           ${renderAnswerInput(assignment.answerSpec)}
           <div class="inline-actions">
             <button class="btn btn--primary" type="submit">Submit Answer</button>
-            <button class="btn btn--secondary" type="button" data-release-assignment>Release Task</button>
+            <a class="btn btn--secondary" href="../submissions/">View Submissions</a>
           </div>
         </form>
       </article>
@@ -458,34 +438,103 @@ function renderAssignment() {
   `;
 }
 
-function renderClaimPanel() {
-  const publicCatalog = state.catalog.filter((benchmark) => benchmark.visibility !== "private" || state.participant?.canAccessPrivate);
+function groupCatalogByDomain(catalog) {
+  const groups = new Map();
+  for (const benchmark of catalog) {
+    const domain = benchmark.domain || "Other";
+    if (!groups.has(domain)) {
+      groups.set(domain, []);
+    }
+    groups.get(domain).push(benchmark);
+  }
+  return [...groups.entries()].sort((left, right) => left[0].localeCompare(right[0]));
+}
+
+function renderProblemList() {
+  const visibleCatalog = state.catalog.filter((benchmark) => benchmark.visibility !== "private" || state.participant?.canAccessPrivate);
+  if (!visibleCatalog.length) {
+    return `<div class="submission-empty">No problems are available for this account yet.</div>`;
+  }
+
+  return groupCatalogByDomain(visibleCatalog).map(([domain, benchmarks]) => `
+    <section class="surface-card problem-domain">
+      <div class="surface-card__header">
+        <p class="surface-card__eyebrow">Domain</p>
+        <h2>${escapeHtml(domain)}</h2>
+      </div>
+      ${benchmarks.map(renderBenchmarkProblems).join("")}
+    </section>
+  `).join("");
+}
+
+function renderBenchmarkProblems(benchmark) {
+  const problems = Array.isArray(benchmark.problems) ? benchmark.problems : [];
   return `
+    <article class="problem-family">
+      <div class="problem-family__header">
+        <div>
+          <h3>${escapeHtml(benchmark.title)}</h3>
+          <p>${escapeHtml(benchmark.description || benchmark.id)}</p>
+        </div>
+        <span class="status-pill">${escapeHtml(benchmark.gradingMode)}</span>
+      </div>
+      <table class="contest-table problem-table">
+        <thead>
+          <tr>
+            <th>Problem</th>
+            <th>Estimate</th>
+            <th>Attempted</th>
+            <th>Successes</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${problems.map((problem) => renderProblemRow(benchmark, problem)).join("")}
+        </tbody>
+      </table>
+    </article>
+  `;
+}
+
+function renderProblemRow(benchmark, problem) {
+  const blocked = Boolean(problem.startedByMe);
+  const status = problem.submittedByMe ? (problem.myStatus || "submitted") : blocked ? "blocked" : "not started";
+  const action = blocked
+    ? `<button class="btn btn--secondary" type="button" disabled>${escapeHtml(status)}</button>`
+    : `<button class="btn btn--primary" type="button" data-start-problem data-benchmark-id="${escapeHtml(benchmark.id)}" data-item-id="${escapeHtml(problem.id)}">Start</button>`;
+  return `
+    <tr>
+      <td>
+        <strong>${escapeHtml(problem.title || problem.id)}</strong>
+        <span class="problem-id">${escapeHtml(problem.id)}</span>
+      </td>
+      <td>${formatMinutes(problem.estimatedMinutes)}</td>
+      <td>${escapeHtml(problem.attempted || 0)}</td>
+      <td>${escapeHtml(problem.successes || 0)}</td>
+      <td>${action}</td>
+    </tr>
+  `;
+}
+
+function renderProblemsPanel() {
+  return `
+    <section class="surface-card important-note">
+      <div class="surface-card__header">
+        <p class="surface-card__eyebrow">Important</p>
+        <h2>Important, read first:</h2>
+      </div>
+      <ul>
+        <li>attempt any number of problems below!</li>
+        <li>you can only click at any one problem once, and then your time for that problem is running</li>
+      </ul>
+    </section>
     <section class="contest-layout">
       <article class="surface-card">
         <div class="surface-card__header">
-          <p class="surface-card__eyebrow">Claim</p>
-          <h2>Choose what to work on next</h2>
+          <p class="surface-card__eyebrow">Problems</p>
+          <h2>Choose a problem to start</h2>
+          <p>After you start a problem, that problem is blocked for your account and cannot be started again.</p>
         </div>
-        <form class="answer-form" data-claim-form>
-          <label>Track
-            <select class="text-input" name="trackId">
-              <option value="">Any track</option>
-              ${state.tracks.map((track) => `
-                <option value="${escapeHtml(track.id)}" ${track.id === state.selectedTrackId ? "selected" : ""}>${escapeHtml(track.title)}</option>
-              `).join("")}
-            </select>
-          </label>
-          <label>Benchmark
-            <select class="text-input" name="benchmarkId">
-              <option value="">Any benchmark in track</option>
-              ${publicCatalog.map((benchmark) => `
-                <option value="${escapeHtml(benchmark.id)}" ${benchmark.id === state.selectedBenchmarkId ? "selected" : ""}>${escapeHtml(benchmark.title)}</option>
-              `).join("")}
-            </select>
-          </label>
-          <button class="btn btn--primary" type="submit">Claim Task</button>
-        </form>
       </article>
       <aside class="surface-card">
         <div class="surface-card__header">
@@ -495,13 +544,7 @@ function renderClaimPanel() {
         ${renderStats()}
       </aside>
     </section>
-    <section class="surface-card">
-      <div class="surface-card__header">
-        <p class="surface-card__eyebrow">Benchmarks</p>
-        <h2>Available problem families</h2>
-      </div>
-      ${renderCatalogTable(publicCatalog)}
-    </section>
+    ${renderProblemList()}
   `;
 }
 
@@ -517,34 +560,6 @@ function renderStats() {
       <div class="sidebar-row"><span>Resolved</span><strong>${escapeHtml(stats.resolvedCount)}</strong></div>
       <div class="sidebar-row"><span>Collected</span><strong>${Number(stats.collectedHours || 0).toFixed(2)} hr</strong></div>
     </div>
-  `;
-}
-
-function renderCatalogTable(catalog) {
-  if (!catalog.length) {
-    return `<div class="submission-empty">No benchmark catalog is available for this account yet.</div>`;
-  }
-  return `
-    <table class="contest-table">
-      <thead>
-        <tr>
-          <th>Benchmark</th>
-          <th>Items</th>
-          <th>Estimate</th>
-          <th>Mode</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${catalog.map((benchmark) => `
-          <tr>
-            <td><strong>${escapeHtml(benchmark.title)}</strong><br><span>${escapeHtml(benchmark.id)}</span></td>
-            <td>${escapeHtml(benchmark.itemCount)}</td>
-            <td>${formatMinutes(benchmark.estimatedRange?.median || benchmark.estimatedRange?.max)}</td>
-            <td><span class="status-pill">${escapeHtml(benchmark.gradingMode)}</span></td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
   `;
 }
 
@@ -603,7 +618,7 @@ function renderContestApp(root) {
   root.innerHTML = `
     ${renderStatus()}
     ${state.session ? renderSignedInHeader() : ""}
-    ${!state.session ? renderAuth() : !state.participant ? renderRegistration() : state.activeAssignment ? renderAssignment() : renderClaimPanel()}
+    ${!state.session ? renderAuth() : !state.participant ? renderRegistration() : state.activeAssignment ? renderAssignment() : renderProblemsPanel()}
     ${state.session && state.participant ? `
       <section class="surface-card">
         <div class="surface-card__header">
@@ -657,9 +672,10 @@ function bind(root) {
     form.addEventListener("submit", (event) => handleAuth(event, form.dataset.authForm));
   });
   root.querySelector("[data-registration-form]")?.addEventListener("submit", handleRegister);
-  root.querySelector("[data-claim-form]")?.addEventListener("submit", handleClaim);
   root.querySelector("[data-answer-form]")?.addEventListener("submit", handleSubmit);
-  root.querySelector("[data-release-assignment]")?.addEventListener("click", handleReleaseAssignment);
+  root.querySelectorAll("[data-start-problem]").forEach((button) => {
+    button.addEventListener("click", () => handleStartProblem(button.dataset.benchmarkId, button.dataset.itemId));
+  });
   root.querySelector("[data-sign-out]")?.addEventListener("click", handleSignOut);
 }
 

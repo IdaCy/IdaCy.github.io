@@ -118,6 +118,57 @@
   gap: 18px;
 }
 
+.important-note ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.important-note li {
+  color: var(--ink-soft);
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.problem-domain {
+  display: grid;
+  gap: 18px;
+}
+
+.problem-family {
+  display: grid;
+  gap: 12px;
+}
+
+.problem-family__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.problem-family__header h3 {
+  margin: 0 0 6px;
+  font-size: 1.24rem;
+}
+
+.problem-family__header p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.problem-id {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.problem-table .btn[disabled] {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
 .problem-statement {
   display: grid;
   gap: 14px;
