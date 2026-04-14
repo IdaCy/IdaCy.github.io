@@ -27,11 +27,14 @@ Deno.serve((request) =>
       serviceClient
         .from("assignments")
         .select("id, benchmark_id, benchmark_item_id, participant_id, status")
-        .eq("event_id", event.id),
+        .eq("event_id", event.id)
+        .not("participant_id", "is", null)
+        .range(0, 9999),
       serviceClient
         .from("submissions")
         .select("id, benchmark_id, benchmark_item_id, participant_id, grading_status, score_value")
-        .eq("event_id", event.id),
+        .eq("event_id", event.id)
+        .range(0, 9999),
     ]);
 
     if (benchmarksResult.error) {
