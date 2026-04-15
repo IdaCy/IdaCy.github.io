@@ -14,6 +14,7 @@ const state = {
   submissionResult: null,
   stats: null,
   submissions: [],
+  answerDrafts: {},
   timerId: null,
   message: "",
   error: "",
@@ -287,6 +288,9 @@ async function refreshStatsIfSignedIn() {
     ]);
     state.submissions = submissions || [];
     state.stats = stats || null;
+    if (state.activeAssignment && !state.submissionResult) {
+      return;
+    }
     render();
   } catch (error) {
     state.error = error.message;
@@ -339,6 +343,7 @@ async function handleSignOut() {
     state.activeAssignment = null;
     state.submissionResult = null;
     state.submissions = [];
+    state.answerDrafts = {};
     state.stats = null;
     setMessage("Signed out.");
   } catch (error) {
@@ -421,6 +426,7 @@ async function handleSubmit(event) {
       }),
     });
     state.submissionResult = submission;
+    delete state.answerDrafts[state.activeAssignment.id];
     state.error = "";
     state.message = "";
     await refreshStatsIfSignedIn();
@@ -440,6 +446,7 @@ function handleTryAgain() {
 async function returnToProblems(message) {
   if (state.activeAssignment) {
     window.localStorage.removeItem(assignmentStartKey(state.activeAssignment.id));
+    delete state.answerDrafts[state.activeAssignment.id];
   }
   state.activeAssignment = null;
   state.submissionResult = null;
@@ -550,14 +557,29 @@ function renderPromptBlock(block) {
   return `<pre class="prompt-text">${escapeHtml(block.text || "")}</pre>`;
 }
 
+function getActiveAnswerDraft() {
+  if (!state.activeAssignment) {
+    return "";
+  }
+  return state.answerDrafts[state.activeAssignment.id] || "";
+}
+
+function setActiveAnswerDraft(value) {
+  if (!state.activeAssignment) {
+    return;
+  }
+  state.answerDrafts[state.activeAssignment.id] = String(value || "");
+}
+
 function renderAnswerInput(answerSpec) {
+  const draft = getActiveAnswerDraft();
   if (answerSpec?.type === "single_choice" && Array.isArray(answerSpec.options)) {
     return `
       <fieldset class="mcqa-options">
         <legend>${escapeHtml(answerSpec.instruction || "Answer")}</legend>
         ${answerSpec.options.map((option) => `
           <label class="mcqa-option">
-            <input type="radio" name="answer" value="${escapeHtml(option.key)}" required>
+            <input type="radio" name="answer" value="${escapeHtml(option.key)}" ${String(option.key) === draft ? "checked" : ""} required>
             <span>${escapeHtml(option.key)}</span>
             <strong>${escapeHtml(option.label)}</strong>
           </label>
@@ -569,14 +591,14 @@ function renderAnswerInput(answerSpec) {
   if (answerSpec?.type === "range") {
     return `
       <label>${escapeHtml(answerSpec.instruction || "Answer")}
-        <input class="text-input" name="answer" type="number" min="${escapeHtml(answerSpec.min ?? 0)}" max="${escapeHtml(answerSpec.max ?? 100)}" placeholder="${escapeHtml(answerSpec.placeholder || "")}" required>
+        <input class="text-input" name="answer" type="number" min="${escapeHtml(answerSpec.min ?? 0)}" max="${escapeHtml(answerSpec.max ?? 100)}" value="${escapeHtml(draft)}" placeholder="${escapeHtml(answerSpec.placeholder || "")}" required>
       </label>
     `;
   }
 
   return `
     <label>${escapeHtml(answerSpec?.instruction || "Enter only the requested final answer. If the problem asks for several values, include all of them in the requested format.")}
-      <textarea name="answer" placeholder="${escapeHtml(answerSpec?.placeholder || "")}" required></textarea>
+      <textarea name="answer" placeholder="${escapeHtml(answerSpec?.placeholder || "")}" required>${escapeHtml(draft)}</textarea>
     </label>
   `;
 }
@@ -904,7 +926,18 @@ function bind(root) {
     form.addEventListener("submit", (event) => handleAuth(event, form.dataset.authForm));
   });
   root.querySelector("[data-registration-form]")?.addEventListener("submit", handleRegister);
-  root.querySelector("[data-answer-form]")?.addEventListener("submit", handleSubmit);
+  const answerForm = root.querySelector("[data-answer-form]");
+  answerForm?.addEventListener("submit", handleSubmit);
+  answerForm?.addEventListener("input", (event) => {
+    if (event.target?.name === "answer") {
+      setActiveAnswerDraft(event.target.value);
+    }
+  });
+  answerForm?.addEventListener("change", (event) => {
+    if (event.target?.name === "answer") {
+      setActiveAnswerDraft(event.target.value);
+    }
+  });
   root.querySelector("[data-try-again]")?.addEventListener("click", handleTryAgain);
   root.querySelector("[data-next-problem]")?.addEventListener("click", handleNextProblem);
   root.querySelectorAll("[data-start-problem]").forEach((button) => {
