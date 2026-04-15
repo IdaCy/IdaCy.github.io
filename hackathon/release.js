@@ -616,7 +616,8 @@ function renderSubmissionResult() {
     return "";
   }
 
-  const attemptText = `Attempt ${Number(result.attemptNumber || 1)} of 3`;
+  const maxAttempts = Number(result.maxAttempts || 3);
+  const attemptText = `Attempt ${Number(result.attemptNumber || 1)} of ${maxAttempts}`;
   let message = "Submission saved.";
   if (result.successful) {
     message = "Correct.";

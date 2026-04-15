@@ -6,11 +6,15 @@ import { withRequestPolicy } from "../_shared/policy.ts";
 import { scoreSubmission } from "../_shared/scoring.ts";
 
 function isSuccessful(scoring: { gradingStatus: string; scoreValue: number | null }) {
-  return scoring.gradingStatus === "correct" || scoring.scoreValue === 1;
+  return scoring.gradingStatus === "correct";
 }
 
 function isTerminalNonRetryable(scoring: { gradingStatus: string; scoreValue: number | null }) {
   return ["pending_llm", "pending_manual", "recorded_score", "correct"].includes(scoring.gradingStatus);
+}
+
+function isSuspicionScoreTask(benchmark: Record<string, unknown>) {
+  return String(benchmark.grading_mode || "") === "score_only" || String(benchmark.scorer || "") === "suspicion_threshold";
 }
 
 Deno.serve((request) =>
@@ -54,15 +58,17 @@ Deno.serve((request) =>
     }
 
     const priorAttempts = priorSubmissionsResult.data || [];
-    if (priorAttempts.some((attempt) => attempt.grading_status === "correct" || Number(attempt.score_value) === 1)) {
+    if (priorAttempts.some((attempt) => attempt.grading_status === "correct")) {
       throw new HttpError(409, "This problem was already completed successfully.");
-    }
-    if (priorAttempts.length >= 3) {
-      throw new HttpError(409, "You have already used all 3 attempts for this problem.");
     }
 
     const startedAt = String(assignment.claimed_at || payload.startedAt || "").trim() || null;
     const { benchmark, item } = await loadBenchmarkAndItem(serviceClient, assignment);
+    const maxAttempts = isSuspicionScoreTask(benchmark) ? 1 : 3;
+    if (priorAttempts.length >= maxAttempts) {
+      throw new HttpError(409, `You have already used all ${maxAttempts} attempt${maxAttempts === 1 ? "" : "s"} for this problem.`);
+    }
+
     const answerKey = (item.answer_key || {}) as Record<string, unknown>;
     const scoring = scoreSubmission({
       scorer: String(benchmark.scorer || ""),
@@ -80,7 +86,7 @@ Deno.serve((request) =>
     const clientActiveSeconds = Number.isFinite(activeSeconds) ? Math.max(0, Math.round(activeSeconds)) : 0;
     const canonicalActiveSeconds = wallClockSeconds ?? clientActiveSeconds;
     const successful = isSuccessful(scoring);
-    const attemptsRemaining = Math.max(0, 3 - attemptNumber);
+    const attemptsRemaining = Math.max(0, maxAttempts - attemptNumber);
     const canRetry = !successful && scoring.gradingStatus === "incorrect" && attemptsRemaining > 0;
     const terminal = successful || !canRetry || isTerminalNonRetryable(scoring);
 
@@ -99,6 +105,9 @@ Deno.serve((request) =>
           clientActiveSeconds,
           clientStartedAt: payload.startedAt || null,
           canonicalStartedAt: startedAt,
+          rawScoreValue: "rawScoreValue" in scoring ? scoring.rawScoreValue : null,
+          predictedLabel: "predictedLabel" in scoring ? scoring.predictedLabel : null,
+          expectedLabel: "expectedLabel" in scoring ? scoring.expectedLabel : null,
         },
         active_seconds: canonicalActiveSeconds,
         wall_clock_seconds: wallClockSeconds,
@@ -164,6 +173,7 @@ Deno.serve((request) =>
       wallClockSeconds,
       submittedAt,
       attemptNumber,
+      maxAttempts,
       attemptsRemaining,
       canRetry,
       terminal,

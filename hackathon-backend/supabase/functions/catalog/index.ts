@@ -129,7 +129,7 @@ Deno.serve((request) =>
             );
             const successfulParticipants = new Set(
               itemSubmissions
-                .filter((submission) => submission.grading_status === "correct" || Number(submission.score_value) === 1)
+                .filter((submission) => submission.grading_status === "correct")
                 .map((submission) => String(submission.participant_id || ""))
                 .filter(Boolean),
             );
