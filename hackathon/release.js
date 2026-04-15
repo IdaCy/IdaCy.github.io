@@ -546,7 +546,7 @@ function renderRegistration() {
       </div>
       <form class="answer-form registration-form" data-registration-form>
         <label>Display name <input class="text-input" name="name" autocomplete="name" required></label>
-        <label>Team <input class="text-input" name="team" autocomplete="organization"></label>
+        <label>Team (optional; and rewards are individual) <input class="text-input" name="team" autocomplete="organization"></label>
         <label>Affiliation <input class="text-input" name="affiliation" autocomplete="organization"></label>
         <button class="btn btn--primary" type="submit">Save Registration</button>
       </form>
