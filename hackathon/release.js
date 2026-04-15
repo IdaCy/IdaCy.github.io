@@ -403,8 +403,11 @@ async function loadContestData() {
   if (stats.status === "fulfilled") {
     state.stats = await enrichStatsForStatsPage(stats.value || null);
   }
-  if (failures.length) {
-    state.message = `Problems loaded. Some status data did not load yet: ${failures.join("; ")}`;
+  if (activeAssignment.status === "rejected" && !state.activeAssignment) {
+    state.message = "Problems loaded. If you already started a problem, refresh this page before choosing another one.";
+    state.error = "";
+  } else if (failures.length && isStatsPage()) {
+    state.message = `Stats loaded partially. Some status data did not load yet: ${failures.join("; ")}`;
     state.error = "";
   }
 }
@@ -454,8 +457,10 @@ async function refreshStatsIfSignedIn() {
     }
     render();
   } catch (error) {
-    state.error = error.message;
-    render();
+    if (isStatsPage()) {
+      state.error = error.message;
+      render();
+    }
   }
 }
 
