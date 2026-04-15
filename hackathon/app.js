@@ -40,7 +40,7 @@ const faqItems = [
   {
     question: "Are the tasks on this page yet?",
     answer:
-      "No. This page is only the public event page for now; task delivery should stay separate until launch.",
+      'Yes. Use the <a href="./contest/">contest page</a> to sign in and start solving.',
   },
 ];
 
@@ -81,7 +81,8 @@ function renderApp() {
           when tasks open in the morning; the in-person hackathon starts after lunch in 6E.
         </p>
         <div class="inline-actions hero-actions">
-          <a class="btn btn--primary" href="#schedule">Schedule</a>
+          <a class="btn btn--primary" href="./contest/">Start Solving</a>
+          <a class="btn btn--secondary" href="#schedule">Schedule</a>
           <a class="btn btn--secondary" href="#faq">FAQ</a>
         </div>
       </div>
