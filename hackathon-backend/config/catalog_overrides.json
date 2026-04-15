@@ -21,11 +21,6 @@
     "frontend_mode": "direct",
     "grading_mode": "instant_exact"
   },
-  "ctrl_alt_deceit_sandbag": {
-    "priority": "sample_first",
-    "frontend_mode": "direct",
-    "grading_mode": "score_only"
-  },
   "vibe_coding_sabotage": {
     "priority": "sample_first",
     "frontend_mode": "direct",

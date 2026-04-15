@@ -33,7 +33,6 @@
       "description": "Score-style monitoring tasks where live stats should emphasize separation rather than thresholded accuracy.",
       "requires_backend": false,
       "benchmark_keys": [
-        "ctrl_alt_deceit_sandbag",
         "vibe_coding_sabotage"
       ]
     },
