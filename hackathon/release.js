@@ -383,6 +383,11 @@ async function loadContestData() {
   if (!state.participant) {
     return;
   }
+  if (isStatsPage()) {
+    state.stats = await enrichStatsForStatsPage(await apiFetch("live-stats"));
+    return;
+  }
+
   const catalog = await apiFetch("catalog");
   state.catalog = catalog || [];
 
