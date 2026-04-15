@@ -340,6 +340,105 @@ function groupStatsRows({ participants, eventParticipants, submissions }) {
   };
 }
 
+async function loadPublicStats() {
+  const [participants, eventParticipants, submissions, assignments, benchmarks] = await Promise.all([
+    publicRestFetch("participants?select=id,name,email,team,affiliation&limit=1000"),
+    publicRestFetch("event_participants?select=participant_id&limit=1000"),
+    publicRestFetch("submissions?select=participant_id,grading_status,active_seconds,benchmark_id,assignment_id&limit=1000"),
+    publicRestFetch("assignments?select=id,benchmark_id,status&limit=10000"),
+    publicRestFetch("benchmarks?select=id,benchmark_key,title,visibility&limit=1000"),
+  ]);
+  const visibleBenchmarks = (benchmarks || [])
+    .filter((benchmark) => !EXCLUDED_BENCHMARK_IDS.has(String(benchmark.benchmark_key)));
+  const visibleBenchmarkIds = new Set(visibleBenchmarks.map((benchmark) => String(benchmark.id)));
+  const visibleAssignments = (assignments || [])
+    .filter((assignment) => visibleBenchmarkIds.has(String(assignment.benchmark_id)));
+  const visibleSubmissions = (submissions || [])
+    .filter((submission) => visibleBenchmarkIds.has(String(submission.benchmark_id)));
+  const grouped = groupStatsRows({
+    participants,
+    eventParticipants,
+    submissions: visibleSubmissions,
+  });
+  const participantById = new Map(
+    (participants || []).map((participant) => [String(participant.id), participant]),
+  );
+  const leaderboardMap = new Map();
+  for (const submission of visibleSubmissions) {
+    const participantId = String(submission.participant_id || "");
+    if (!participantId) {
+      continue;
+    }
+    const participant = participantById.get(participantId) || {};
+    if (!leaderboardMap.has(participantId)) {
+      leaderboardMap.set(participantId, {
+        label: String(participant.name || participant.email || participantId),
+        submissions: 0,
+        resolved: 0,
+        correct: 0,
+        seconds: 0,
+      });
+    }
+    const row = leaderboardMap.get(participantId);
+    row.submissions += 1;
+    row.seconds += Number(submission.active_seconds || 0);
+    if (["correct", "incorrect", "recorded_score", "blocked", "abandoned"].includes(String(submission.grading_status))) {
+      row.resolved += 1;
+    }
+    if (submission.grading_status === "correct") {
+      row.correct += 1;
+    }
+  }
+  const coverage = visibleBenchmarks.map((benchmark) => {
+    const benchmarkId = String(benchmark.id);
+    const benchmarkAssignments = visibleAssignments.filter((assignment) => String(assignment.benchmark_id) === benchmarkId);
+    const benchmarkSubmissions = visibleSubmissions.filter((submission) => String(submission.benchmark_id) === benchmarkId);
+    const uniqueAssignmentIds = new Set(benchmarkSubmissions.map((submission) => String(submission.assignment_id || "")).filter(Boolean));
+    return {
+      benchmarkId: benchmark.benchmark_key,
+      title: benchmark.title,
+      availableInMock: benchmarkAssignments.length,
+      submittedInMock: uniqueAssignmentIds.size,
+      rawSubmissionCount: benchmarkSubmissions.length,
+      coverageRatio: benchmarkAssignments.length > 0 ? uniqueAssignmentIds.size / benchmarkAssignments.length : 0,
+      collectedHours: benchmarkSubmissions.reduce(
+        (sum, submission) => sum + Number(submission.active_seconds || 0),
+        0,
+      ) / 3600,
+    };
+  })
+    .filter((row) => row.availableInMock > 0)
+    .sort((left, right) =>
+      right.coverageRatio - left.coverageRatio ||
+      right.rawSubmissionCount - left.rawSubmissionCount
+    );
+
+  return {
+    participantCount: (eventParticipants || []).length,
+    submissionCount: visibleSubmissions.length,
+    uniqueAssignmentsCovered: new Set(visibleSubmissions.map((row) => String(row.assignment_id || "")).filter(Boolean)).size,
+    resolvedCount: visibleSubmissions.filter((row) =>
+      ["correct", "incorrect", "recorded_score", "blocked", "abandoned"].includes(String(row.grading_status))
+    ).length,
+    pendingCount: visibleSubmissions.filter((row) =>
+      ["pending_llm", "pending_manual"].includes(String(row.grading_status))
+    ).length,
+    collectedHours: visibleSubmissions.reduce(
+      (sum, row) => sum + Number(row.active_seconds || 0),
+      0,
+    ) / 3600,
+    teamCount: grouped.teams.length,
+    affiliationCount: grouped.affiliations.length,
+    leaderboard: [...leaderboardMap.values()].sort((left, right) =>
+      right.submissions - left.submissions || left.seconds - right.seconds
+    ),
+    teams: grouped.teams,
+    affiliations: grouped.affiliations,
+    coverage,
+    source: "public-rest",
+  };
+}
+
 async function enrichStatsForStatsPage(stats) {
   if (!isStatsPage() || !stats || (Array.isArray(stats.teams) && Array.isArray(stats.affiliations))) {
     return stats;
@@ -360,6 +459,14 @@ async function enrichStatsForStatsPage(stats) {
     };
   } catch (_error) {
     return stats;
+  }
+}
+
+async function loadStatsForStatsPage() {
+  try {
+    return await enrichStatsForStatsPage(await apiFetch("live-stats"));
+  } catch (_error) {
+    return loadPublicStats();
   }
 }
 
@@ -384,7 +491,7 @@ async function loadContestData() {
     return;
   }
   if (isStatsPage()) {
-    state.stats = await enrichStatsForStatsPage(await apiFetch("live-stats"));
+    state.stats = await loadStatsForStatsPage();
     return;
   }
 
@@ -455,6 +562,11 @@ async function refreshStatsIfSignedIn() {
     return;
   }
   try {
+    if (isStatsPage()) {
+      state.stats = await loadStatsForStatsPage();
+      render();
+      return;
+    }
     const [submissions, stats] = await Promise.all([
       apiFetch("my-submissions"),
       apiFetch("live-stats"),
