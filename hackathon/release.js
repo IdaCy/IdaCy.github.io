@@ -818,7 +818,7 @@ function renderProblemList() {
           <p class="surface-card__eyebrow">Domain</p>
           <h2>${escapeHtml(domain)}</h2>
         </div>
-        <button class="btn btn--secondary" type="button" data-random-domain="${escapeHtml(domain)}" ${getStartableProblemsForBenchmarks(benchmarks).length ? "" : "disabled"}>Random Task</button>
+        <button class="btn btn--primary" type="button" data-random-domain="${escapeHtml(domain)}" ${getStartableProblemsForBenchmarks(benchmarks).length ? "" : "disabled"}>Random Task</button>
       </div>
       ${benchmarks.map(renderBenchmarkProblems).join("")}
     </section>
