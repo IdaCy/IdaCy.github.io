@@ -39,7 +39,10 @@ Deno.serve((request) =>
         .from("event_benchmark_configs")
         .select("*")
         .eq("event_id", event.id),
-      serviceClient.from("benchmark_items").select("*").order("item_key"),
+      serviceClient
+        .from("benchmark_items")
+        .select("id, benchmark_id, item_key, metadata")
+        .order("item_key"),
       serviceClient
         .from("assignments")
         .select("id, benchmark_id, benchmark_item_id, participant_id, status")
@@ -125,8 +128,8 @@ Deno.serve((request) =>
           priority: config?.priority_override || benchmark.priority,
           notes: config?.notes_override || benchmark.notes || "",
           problems: benchmarkItems.map((item) => {
-            const renderPayload = asObject(item.render_payload);
             const metadata = asObject(item.metadata);
+            const renderPayload = { title: metadata.inferred_title };
             const itemId = String(item.id);
             const itemAssignments = assignments.filter((assignment) => String(assignment.benchmark_item_id) === itemId);
             const itemSubmissions = submissions.filter((submission) => String(submission.benchmark_item_id) === itemId);
