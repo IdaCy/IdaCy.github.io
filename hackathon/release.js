@@ -931,7 +931,6 @@ function renderStats() {
     <div class="sidebar-list">
       <div class="sidebar-row"><span>Participants</span><strong>${escapeHtml(stats.participantCount)}</strong></div>
       <div class="sidebar-row"><span>Submissions</span><strong>${escapeHtml(stats.submissionCount)}</strong></div>
-      <div class="sidebar-row"><span>Resolved</span><strong>${escapeHtml(stats.resolvedCount)}</strong></div>
       <div class="sidebar-row"><span>Collected</span><strong>${Number(stats.collectedHours || 0).toFixed(2)} hr</strong></div>
     </div>
   `;
