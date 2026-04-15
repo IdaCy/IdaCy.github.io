@@ -144,6 +144,26 @@
   gap: 18px;
 }
 
+.problem-domain__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.problem-domain__header h2 {
+  margin: 0;
+}
+
+.problem-domain__header .btn {
+  flex: 0 0 auto;
+}
+
+.btn[disabled] {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
 .problem-family {
   display: grid;
   gap: 12px;
@@ -182,11 +202,6 @@
   padding: 4px 10px;
   font-size: 0.9rem;
   line-height: 1.1;
-}
-
-.problem-table .btn[disabled] {
-  cursor: not-allowed;
-  opacity: 0.68;
 }
 
 .problem-statement {

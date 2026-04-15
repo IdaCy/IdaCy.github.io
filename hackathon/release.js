@@ -733,24 +733,63 @@ function groupCatalogByDomain(catalog) {
   return [...groups.entries()].sort((left, right) => left[0].localeCompare(right[0]));
 }
 
-function renderProblemList() {
-  const visibleCatalog = state.catalog.filter((benchmark) =>
+function getStartableProblemsForBenchmarks(benchmarks) {
+  const startable = [];
+  for (const benchmark of benchmarks || []) {
+    if (EXCLUDED_BENCHMARK_IDS.has(String(benchmark.id))) {
+      continue;
+    }
+    for (const problem of benchmark.problems || []) {
+      if (problem.startedByMe || problem.submittedByMe) {
+        continue;
+      }
+      startable.push({
+        benchmarkId: benchmark.id,
+        itemId: problem.id,
+      });
+    }
+  }
+  return startable;
+}
+
+function getVisibleCatalog() {
+  return state.catalog.filter((benchmark) =>
     !EXCLUDED_BENCHMARK_IDS.has(String(benchmark.id)) &&
     (benchmark.visibility !== "private" || state.participant?.canAccessPrivate)
   );
+}
+
+function renderProblemList() {
+  const visibleCatalog = getVisibleCatalog();
   if (!visibleCatalog.length) {
     return `<div class="submission-empty">No problems are available for this account yet.</div>`;
   }
 
   return groupCatalogByDomain(visibleCatalog).map(([domain, benchmarks]) => `
     <section class="surface-card problem-domain">
-      <div class="surface-card__header">
-        <p class="surface-card__eyebrow">Domain</p>
-        <h2>${escapeHtml(domain)}</h2>
+      <div class="surface-card__header problem-domain__header">
+        <div>
+          <p class="surface-card__eyebrow">Domain</p>
+          <h2>${escapeHtml(domain)}</h2>
+        </div>
+        <button class="btn btn--secondary" type="button" data-random-domain="${escapeHtml(domain)}" ${getStartableProblemsForBenchmarks(benchmarks).length ? "" : "disabled"}>Random Task</button>
       </div>
       ${benchmarks.map(renderBenchmarkProblems).join("")}
     </section>
   `).join("");
+}
+
+async function handleRandomDomain(domain) {
+  const benchmarks = groupCatalogByDomain(getVisibleCatalog())
+    .find(([groupDomain]) => groupDomain === domain)?.[1] || [];
+  const startable = getStartableProblemsForBenchmarks(benchmarks);
+  if (!startable.length) {
+    setError(`No startable tasks remain in ${domain}.`);
+    render();
+    return;
+  }
+  const choice = startable[Math.floor(Math.random() * startable.length)];
+  await handleStartProblem(choice.benchmarkId, choice.itemId);
 }
 
 function renderBenchmarkProblems(benchmark) {
@@ -982,6 +1021,9 @@ function bind(root) {
   root.querySelector("[data-next-problem]")?.addEventListener("click", handleNextProblem);
   root.querySelectorAll("[data-start-problem]").forEach((button) => {
     button.addEventListener("click", () => handleStartProblem(button.dataset.benchmarkId, button.dataset.itemId));
+  });
+  root.querySelectorAll("[data-random-domain]").forEach((button) => {
+    button.addEventListener("click", () => handleRandomDomain(button.dataset.randomDomain));
   });
   root.querySelectorAll("[data-copy-text]").forEach((button) => {
     button.addEventListener("click", () => handleCopyText(button));
