@@ -76,6 +76,7 @@ function renderApp() {
       <div>
         <p class="eyebrow">Time Horizons</p>
         <h1>Time Horizons Hackathon</h1>
+        <a class="hero-contest-link" href="./contest/">Go to the contest</a>
         <p class="hero-copy">
           Help collect human solving times for Time Horizons tasks. Remote participants can start
           when tasks open in the morning; the in-person hackathon starts after lunch in 6E.
