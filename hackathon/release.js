@@ -387,7 +387,8 @@ async function handleStartProblem(benchmarkId, itemId) {
     if (assignment) {
       getAssignmentStart(assignment.id, assignment.claimedAt);
       setMessage("Problem started. Your timer is running.");
-      await loadContestData();
+      render();
+      await refreshStatsIfSignedIn();
       state.activeAssignment = assignment;
     } else {
       setMessage("No attempt slot is currently available for that problem.");
