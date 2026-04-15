@@ -16,6 +16,15 @@ const EXCLUDED_BENCHMARK_KEYS = new Set([
   "shade_monitor_cot_action",
 ]);
 
+function stableShuffleKey(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 Deno.serve((request) =>
   withRequestPolicy(request, { endpoint: "catalog", limit: 60, windowSeconds: 300 }, async () => {
     if (request.method !== "GET") {
@@ -92,9 +101,14 @@ Deno.serve((request) =>
       })
       .map((benchmark) => {
         const config = configByBenchmarkId.get(benchmark.id);
-        const benchmarkItems = itemsByBenchmarkId.get(String(benchmark.id)) || [];
+        const benchmarkKey = String(benchmark.benchmark_key);
+        const benchmarkItems = [...(itemsByBenchmarkId.get(String(benchmark.id)) || [])].sort((left, right) => {
+          const leftKey = stableShuffleKey(`${benchmarkKey}:${String(left.item_key)}`);
+          const rightKey = stableShuffleKey(`${benchmarkKey}:${String(right.item_key)}`);
+          return leftKey - rightKey || String(left.item_key).localeCompare(String(right.item_key));
+        });
         return {
-          id: benchmark.benchmark_key,
+          id: benchmarkKey,
           title: benchmark.title,
           description: benchmark.description,
           domain: benchmark.domain,
