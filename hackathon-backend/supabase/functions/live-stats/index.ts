@@ -2,6 +2,11 @@ import { requireParticipant } from "../_shared/auth.ts";
 import { HttpError, json } from "../_shared/http.ts";
 import { withRequestPolicy } from "../_shared/policy.ts";
 
+function cleanGroupLabel(value: unknown, fallback: string) {
+  const label = String(value || "").trim();
+  return label || fallback;
+}
+
 Deno.serve((request) =>
   withRequestPolicy(request, { endpoint: "live-stats", limit: 60, windowSeconds: 300 }, async () => {
     if (request.method !== "GET") {
@@ -53,18 +58,21 @@ Deno.serve((request) =>
     const assignments = (assignmentsResult.data || []).filter((row) => visibleBenchmarkIds.has(row.benchmark_id));
     const submissions = (submissionsResult.data || []).filter((row) => visibleBenchmarkIds.has(row.benchmark_id));
 
-    const participantIds = [...new Set(submissions.map((row) => row.participant_id))];
-    const participantNameById = new Map<string, string>();
+    const participantIds = [...new Set([
+      ...(participantsResult.data || []).map((row) => row.participant_id),
+      ...submissions.map((row) => row.participant_id),
+    ].filter(Boolean))];
+    const participantById = new Map<string, Record<string, unknown>>();
     if (participantIds.length > 0) {
       const participantRows = await serviceClient
         .from("participants")
-        .select("id, name, email")
+        .select("id, name, email, team, affiliation")
         .in("id", participantIds);
       if (participantRows.error) {
         throw new HttpError(500, "Failed to resolve participant names.", participantRows.error);
       }
       for (const row of participantRows.data || []) {
-        participantNameById.set(row.id, row.name || row.email);
+        participantById.set(row.id, row);
       }
     }
 
@@ -75,12 +83,42 @@ Deno.serve((request) =>
       correct: number;
       seconds: number;
     }>();
+    const teamMap = new Map<string, {
+      label: string;
+      participants: Set<string>;
+      submissions: number;
+      correct: number;
+      seconds: number;
+    }>();
+    const affiliationMap = new Map<string, {
+      label: string;
+      participants: Set<string>;
+      submissions: number;
+      correct: number;
+      seconds: number;
+    }>();
+
+    for (const eventParticipant of participantsResult.data || []) {
+      const participantId = String(eventParticipant.participant_id || "");
+      const participant = participantById.get(participantId) || {};
+      const team = cleanGroupLabel(participant.team, "No team");
+      const affiliation = cleanGroupLabel(participant.affiliation, "No affiliation");
+      if (!teamMap.has(team)) {
+        teamMap.set(team, { label: team, participants: new Set(), submissions: 0, correct: 0, seconds: 0 });
+      }
+      if (!affiliationMap.has(affiliation)) {
+        affiliationMap.set(affiliation, { label: affiliation, participants: new Set(), submissions: 0, correct: 0, seconds: 0 });
+      }
+      teamMap.get(team)!.participants.add(participantId);
+      affiliationMap.get(affiliation)!.participants.add(participantId);
+    }
 
     for (const submission of submissions) {
       const participantId = String(submission.participant_id);
+      const participant = participantById.get(participantId) || {};
       if (!leaderboardMap.has(participantId)) {
         leaderboardMap.set(participantId, {
-          label: participantNameById.get(participantId) || participantId,
+          label: String(participant.name || participant.email || participantId),
           submissions: 0,
           resolved: 0,
           correct: 0,
@@ -95,6 +133,27 @@ Deno.serve((request) =>
       }
       if (submission.grading_status === "correct") {
         row.correct += 1;
+      }
+
+      const team = cleanGroupLabel(participant.team, "No team");
+      const affiliation = cleanGroupLabel(participant.affiliation, "No affiliation");
+      if (!teamMap.has(team)) {
+        teamMap.set(team, { label: team, participants: new Set(), submissions: 0, correct: 0, seconds: 0 });
+      }
+      if (!affiliationMap.has(affiliation)) {
+        affiliationMap.set(affiliation, { label: affiliation, participants: new Set(), submissions: 0, correct: 0, seconds: 0 });
+      }
+      const teamRow = teamMap.get(team)!;
+      const affiliationRow = affiliationMap.get(affiliation)!;
+      teamRow.participants.add(participantId);
+      affiliationRow.participants.add(participantId);
+      teamRow.submissions += 1;
+      affiliationRow.submissions += 1;
+      teamRow.seconds += Number(submission.active_seconds || 0);
+      affiliationRow.seconds += Number(submission.active_seconds || 0);
+      if (submission.grading_status === "correct") {
+        teamRow.correct += 1;
+        affiliationRow.correct += 1;
       }
     }
 
@@ -139,9 +198,37 @@ Deno.serve((request) =>
         (sum, row) => sum + Number(row.active_seconds || 0),
         0,
       ) / 3600,
+      teamCount: teamMap.size,
+      affiliationCount: affiliationMap.size,
       leaderboard: [...leaderboardMap.values()].sort((left, right) =>
         right.submissions - left.submissions || left.seconds - right.seconds
       ),
+      teams: [...teamMap.values()]
+        .map((row) => ({
+          label: row.label,
+          participantCount: row.participants.size,
+          submissions: row.submissions,
+          correct: row.correct,
+          collectedHours: row.seconds / 3600,
+        }))
+        .sort((left, right) =>
+          right.submissions - left.submissions ||
+          right.participantCount - left.participantCount ||
+          left.label.localeCompare(right.label)
+        ),
+      affiliations: [...affiliationMap.values()]
+        .map((row) => ({
+          label: row.label,
+          participantCount: row.participants.size,
+          submissions: row.submissions,
+          correct: row.correct,
+          collectedHours: row.seconds / 3600,
+        }))
+        .sort((left, right) =>
+          right.submissions - left.submissions ||
+          right.participantCount - left.participantCount ||
+          left.label.localeCompare(right.label)
+        ),
       coverage,
     });
   })

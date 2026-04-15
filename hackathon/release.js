@@ -70,6 +70,22 @@ function formatMinutes(minutes) {
   return `${value.toFixed(value < 10 ? 1 : 0)} min`;
 }
 
+function formatHours(hours) {
+  const value = Number(hours || 0);
+  if (!Number.isFinite(value) || value <= 0) {
+    return "0 min";
+  }
+  if (value < 1) {
+    return `${Math.round(value * 60)} min`;
+  }
+  return `${value.toFixed(value < 10 ? 1 : 0)} hr`;
+}
+
+function formatInteger(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? String(Math.round(number)) : "0";
+}
+
 function titleCasePhrase(value) {
   const acronyms = new Set(["api", "cli", "csv", "json", "pr", "ssn", "url", "yaml"]);
   const smallWords = new Set(["a", "an", "and", "as", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "with"]);
@@ -994,6 +1010,201 @@ function renderStatus() {
   return "";
 }
 
+function getTopRows(rows, limit = 8) {
+  return Array.isArray(rows) ? rows.slice(0, limit) : [];
+}
+
+function getMaxValue(rows, key) {
+  return Math.max(1, ...getTopRows(rows, 10).map((row) => Number(row?.[key] || 0)));
+}
+
+function renderStatsGraphic(stats) {
+  const coverage = getTopRows(stats?.coverage, 7);
+  if (!coverage.length) {
+    return `
+      <section class="surface-card stats-graphic">
+        <div class="stats-graphic__empty">
+          <p class="surface-card__eyebrow">Live Graph</p>
+          <h2>Waiting for submissions</h2>
+          <p>Coverage bars will update as tasks are submitted.</p>
+        </div>
+      </section>
+    `;
+  }
+
+  const maxSubmissions = Math.max(1, ...coverage.map((row) => Number(row.rawSubmissionCount || 0)));
+  const bars = coverage.map((row, index) => {
+    const y = 34 + index * 48;
+    const width = Math.max(8, (Number(row.rawSubmissionCount || 0) / maxSubmissions) * 300);
+    const label = compactText(row.title || row.benchmarkId, 5);
+    return `
+      <g>
+        <text x="0" y="${y + 18}" class="stats-chart-label">${escapeHtml(label)}</text>
+        <rect x="150" y="${y}" width="300" height="26" rx="6" class="stats-chart-track"></rect>
+        <rect x="150" y="${y}" width="${width.toFixed(1)}" height="26" rx="6" class="stats-chart-bar"></rect>
+        <text x="${Math.min(430, 160 + width)}" y="${y + 18}" class="stats-chart-value">${escapeHtml(row.rawSubmissionCount || 0)}</text>
+      </g>
+    `;
+  }).join("");
+
+  return `
+    <section class="surface-card stats-graphic">
+      <div class="stats-graphic__header">
+        <div>
+          <p class="surface-card__eyebrow">Live Graph</p>
+          <h2>Coverage by Benchmark</h2>
+        </div>
+        <strong>${formatHours(stats.collectedHours)} collected</strong>
+      </div>
+      <svg class="stats-chart" viewBox="0 0 470 390" role="img" aria-label="Benchmark submission counts">
+        <rect x="0" y="0" width="470" height="390" rx="8" class="stats-chart-bg"></rect>
+        ${bars}
+      </svg>
+    </section>
+  `;
+}
+
+function renderStatsMetric(label, value, detail = "") {
+  return `
+    <article class="stats-metric">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      ${detail ? `<p>${escapeHtml(detail)}</p>` : ""}
+    </article>
+  `;
+}
+
+function renderStatsBars(title, rows, valueKey, emptyText) {
+  const topRows = getTopRows(rows, 8);
+  if (!topRows.length) {
+    return `
+      <section class="surface-card">
+        <div class="surface-card__header">
+          <p class="surface-card__eyebrow">Breakdown</p>
+          <h2>${escapeHtml(title)}</h2>
+        </div>
+        <div class="submission-empty">${escapeHtml(emptyText)}</div>
+      </section>
+    `;
+  }
+  const maxValue = getMaxValue(topRows, valueKey);
+  return `
+    <section class="surface-card">
+      <div class="surface-card__header">
+        <p class="surface-card__eyebrow">Breakdown</p>
+        <h2>${escapeHtml(title)}</h2>
+      </div>
+      <div class="stats-bar-list">
+        ${topRows.map((row) => {
+          const value = Number(row[valueKey] || 0);
+          const width = Math.max(3, (value / maxValue) * 100);
+          const detail = row.participantCount != null
+            ? `${formatInteger(row.participantCount)} people, ${formatHours(row.collectedHours)}`
+            : `${formatInteger(row.correct)} correct, ${formatHours(Number(row.seconds || 0) / 3600)}`;
+          return `
+            <article class="stats-bar-row">
+              <div>
+                <strong>${escapeHtml(row.label || row.title || row.benchmarkId || "Unknown")}</strong>
+                <span>${escapeHtml(detail)}</span>
+              </div>
+              <div class="stats-bar-row__track" aria-hidden="true">
+                <span style="width: ${width.toFixed(1)}%"></span>
+              </div>
+              <b>${escapeHtml(formatInteger(value))}</b>
+            </article>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderCoverageTable(stats) {
+  const rows = getTopRows(stats?.coverage, 10);
+  if (!rows.length) {
+    return `<div class="submission-empty">No coverage data yet.</div>`;
+  }
+  return `
+    <table class="contest-table">
+      <thead>
+        <tr>
+          <th>Benchmark</th>
+          <th>Submitted</th>
+          <th>Slots</th>
+          <th>Coverage</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr>
+            <td>${escapeHtml(row.title || row.benchmarkId)}</td>
+            <td>${escapeHtml(row.rawSubmissionCount || 0)}</td>
+            <td>${escapeHtml(row.submittedInMock || 0)} / ${escapeHtml(row.availableInMock || 0)}</td>
+            <td>${escapeHtml(`${Math.round(Number(row.coverageRatio || 0) * 100)}%`)}</td>
+            <td>${escapeHtml(formatHours(row.collectedHours))}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderStatsPanel() {
+  const stats = state.stats;
+  if (!stats) {
+    return `<div class="submission-empty">Stats will appear after the backend responds.</div>`;
+  }
+
+  const teamCount = stats.teamCount ?? (Array.isArray(stats.teams) ? stats.teams.length : null);
+  const affiliationCount = stats.affiliationCount ?? (Array.isArray(stats.affiliations) ? stats.affiliations.length : null);
+
+  return `
+    <section class="stats-hero">
+      <div class="stats-metric-grid">
+        ${renderStatsMetric("Participants", formatInteger(stats.participantCount), teamCount == null ? "" : `${formatInteger(teamCount)} teams`)}
+        ${renderStatsMetric("Submissions", formatInteger(stats.submissionCount), `${formatInteger(stats.resolvedCount)} resolved`)}
+        ${renderStatsMetric("Time Collected", formatHours(stats.collectedHours), `${formatInteger(stats.uniqueAssignmentsCovered)} tasks covered`)}
+        ${renderStatsMetric("Institutions", affiliationCount == null ? "Pending" : formatInteger(affiliationCount), "from registration")}
+      </div>
+      ${renderStatsGraphic(stats)}
+    </section>
+    <section class="stats-grid">
+      ${renderStatsBars("Teams", stats.teams, "submissions", "Team breakdown appears after the stats function is deployed.")}
+      ${renderStatsBars("Institutions", stats.affiliations, "submissions", "Institution breakdown appears after the stats function is deployed.")}
+    </section>
+    <section class="stats-grid">
+      ${renderStatsBars("Leaderboard", stats.leaderboard, "submissions", "No participant submissions yet.")}
+      <section class="surface-card">
+        <div class="surface-card__header">
+          <p class="surface-card__eyebrow">Coverage</p>
+          <h2>Benchmark Progress</h2>
+        </div>
+        ${renderCoverageTable(stats)}
+      </section>
+    </section>
+  `;
+}
+
+function renderStatsApp(root) {
+  if (!isConfigured()) {
+    root.innerHTML = `
+      <section class="surface-card">
+        <h2>Supabase config needed</h2>
+        <p>Fill in hackathon/hackathon-config.js before loading stats.</p>
+      </section>
+    `;
+    return;
+  }
+
+  root.innerHTML = `
+    ${renderStatus()}
+    ${state.session ? renderSignedInHeader() : state.loading ? "" : renderAuth()}
+    ${state.loading ? "" : state.session && !state.participant ? renderRegistration() : ""}
+    ${!state.loading && state.session && state.participant ? renderStatsPanel() : ""}
+  `;
+}
+
 function renderContestApp(root) {
   if (!isConfigured()) {
     root.innerHTML = `
@@ -1143,7 +1354,8 @@ function restoreProblemScroll(scrollState) {
 function render() {
   const contestRoot = document.querySelector("[data-contest-app]");
   const submissionsRoot = document.querySelector("[data-submissions-app]");
-  const root = contestRoot || submissionsRoot;
+  const statsRoot = document.querySelector("[data-stats-app]");
+  const root = contestRoot || submissionsRoot || statsRoot;
   if (!root) {
     return;
   }
@@ -1159,6 +1371,10 @@ function render() {
   if (submissionsRoot) {
     renderSubmissionsApp(submissionsRoot);
     bind(submissionsRoot);
+  }
+  if (statsRoot) {
+    renderStatsApp(statsRoot);
+    bind(statsRoot);
   }
   if (state.activeAssignment) {
     restoreProblemScroll(problemScroll);

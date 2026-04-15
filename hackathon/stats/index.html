@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Submissions - Time Horizons Hackathon</title>
-  <meta name="description" content="Submissions view for the Time Horizons Hackathon.">
+  <title>Live Stats - Time Horizons Hackathon</title>
+  <meta name="description" content="Live stats for the Time Horizons Hackathon.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -15,20 +15,21 @@
   <link rel="stylesheet" href="../release.css?v=stats-page-1">
 </head>
 <body>
-  <div class="page-shell contest-shell">
+  <div class="page-shell contest-shell stats-shell">
     <header class="contest-header">
       <div>
         <p class="eyebrow">Baseline drive</p>
-        <h1>Submissions</h1>
-        <p>Your submitted answers and timing records for the current event.</p>
+        <h1>Live Stats</h1>
+        <p>Submissions, teams, institutions, time collected, and benchmark coverage.</p>
       </div>
       <nav class="contest-nav" aria-label="Contest">
         <a class="btn btn--secondary" href="../contest/">Problems</a>
-        <a class="btn btn--secondary" href="../stats/">Stats</a>
+        <a class="btn btn--primary" href="./">Stats</a>
+        <a class="btn btn--secondary" href="../submissions/">Submissions</a>
       </nav>
     </header>
 
-    <main id="submissions-app" class="contest-app" data-submissions-app></main>
+    <main id="stats-app" class="contest-app" data-stats-app></main>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
