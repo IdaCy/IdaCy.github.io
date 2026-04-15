@@ -240,6 +240,128 @@ async function apiFetch(endpoint, options = {}) {
   return payload;
 }
 
+async function publicRestFetch(path) {
+  const config = getConfig();
+  const response = await fetch(`${String(config.supabaseUrl || "").replace(/\/$/, "")}/rest/v1/${path.replace(/^\//, "")}`, {
+    headers: {
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Public stats lookup failed with HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+function isStatsPage() {
+  return Boolean(document.querySelector("[data-stats-app]"));
+}
+
+function groupStatsRows({ participants, eventParticipants, submissions }) {
+  const participantById = new Map(
+    (participants || []).map((participant) => [String(participant.id), participant]),
+  );
+  const teamMap = new Map();
+  const affiliationMap = new Map();
+
+  function ensure(map, label) {
+    if (!map.has(label)) {
+      map.set(label, {
+        label,
+        participants: new Set(),
+        submissions: 0,
+        correct: 0,
+        seconds: 0,
+      });
+    }
+    return map.get(label);
+  }
+
+  function labelsForParticipant(participantId) {
+    const participant = participantById.get(String(participantId)) || {};
+    return {
+      team: String(participant.team || "").trim() || "No team",
+      affiliation: String(participant.affiliation || "").trim() || "No affiliation",
+    };
+  }
+
+  for (const row of eventParticipants || []) {
+    const participantId = String(row.participant_id || "");
+    if (!participantId) {
+      continue;
+    }
+    const labels = labelsForParticipant(participantId);
+    ensure(teamMap, labels.team).participants.add(participantId);
+    ensure(affiliationMap, labels.affiliation).participants.add(participantId);
+  }
+
+  for (const submission of submissions || []) {
+    const participantId = String(submission.participant_id || "");
+    if (!participantId) {
+      continue;
+    }
+    const labels = labelsForParticipant(participantId);
+    const team = ensure(teamMap, labels.team);
+    const affiliation = ensure(affiliationMap, labels.affiliation);
+    const seconds = Number(submission.active_seconds || 0);
+    team.participants.add(participantId);
+    affiliation.participants.add(participantId);
+    team.submissions += 1;
+    affiliation.submissions += 1;
+    team.seconds += seconds;
+    affiliation.seconds += seconds;
+    if (submission.grading_status === "correct") {
+      team.correct += 1;
+      affiliation.correct += 1;
+    }
+  }
+
+  function finalize(map) {
+    return [...map.values()]
+      .map((row) => ({
+        label: row.label,
+        participantCount: row.participants.size,
+        submissions: row.submissions,
+        correct: row.correct,
+        collectedHours: row.seconds / 3600,
+      }))
+      .sort((left, right) =>
+        right.submissions - left.submissions ||
+        right.participantCount - left.participantCount ||
+        left.label.localeCompare(right.label)
+      );
+  }
+
+  return {
+    teams: finalize(teamMap),
+    affiliations: finalize(affiliationMap),
+  };
+}
+
+async function enrichStatsForStatsPage(stats) {
+  if (!isStatsPage() || !stats || (Array.isArray(stats.teams) && Array.isArray(stats.affiliations))) {
+    return stats;
+  }
+  try {
+    const [participants, eventParticipants, submissions] = await Promise.all([
+      publicRestFetch("participants?select=id,name,email,team,affiliation&limit=1000"),
+      publicRestFetch("event_participants?select=participant_id&limit=1000"),
+      publicRestFetch("submissions?select=participant_id,grading_status,active_seconds&limit=1000"),
+    ]);
+    const grouped = groupStatsRows({ participants, eventParticipants, submissions });
+    return {
+      ...stats,
+      teamCount: grouped.teams.length,
+      affiliationCount: grouped.affiliations.length,
+      teams: grouped.teams,
+      affiliations: grouped.affiliations,
+    };
+  } catch (_error) {
+    return stats;
+  }
+}
+
 async function refreshSession() {
   const { data } = await state.client.auth.getSession();
   state.session = data.session || null;
@@ -279,7 +401,7 @@ async function loadContestData() {
     state.submissions = submissions.value || [];
   }
   if (stats.status === "fulfilled") {
-    state.stats = stats.value || null;
+    state.stats = await enrichStatsForStatsPage(stats.value || null);
   }
   if (failures.length) {
     state.message = `Problems loaded. Some status data did not load yet: ${failures.join("; ")}`;
@@ -326,7 +448,7 @@ async function refreshStatsIfSignedIn() {
       apiFetch("live-stats"),
     ]);
     state.submissions = submissions || [];
-    state.stats = stats || null;
+    state.stats = await enrichStatsForStatsPage(stats || null);
     if (state.activeAssignment && !state.submissionResult) {
       return;
     }
@@ -1170,8 +1292,8 @@ function renderStatsPanel() {
       ${renderStatsGraphic(stats)}
     </section>
     <section class="stats-grid">
-      ${renderStatsBars("Teams", stats.teams, "submissions", "Team breakdown appears after the stats function is deployed.")}
-      ${renderStatsBars("Institutions", stats.affiliations, "submissions", "Institution breakdown appears after the stats function is deployed.")}
+      ${renderStatsBars("Teams", stats.teams, "submissions", "No team activity yet.")}
+      ${renderStatsBars("Institutions", stats.affiliations, "submissions", "No institution activity yet.")}
     </section>
     <section class="stats-grid">
       ${renderStatsBars("Leaderboard", stats.leaderboard, "submissions", "No participant submissions yet.")}
