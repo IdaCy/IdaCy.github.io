@@ -317,6 +317,50 @@ function setError(error) {
   state.message = "";
 }
 
+function updateCatalogProblem(benchmarkId, itemId, updater) {
+  state.catalog = state.catalog.map((benchmark) => {
+    if (String(benchmark.id) !== String(benchmarkId)) {
+      return benchmark;
+    }
+    return {
+      ...benchmark,
+      problems: (benchmark.problems || []).map((problem) =>
+        String(problem.id) === String(itemId) ? updater(problem) : problem
+      ),
+    };
+  });
+}
+
+function markProblemStarted(assignment) {
+  if (!assignment?.benchmarkId || !assignment?.itemId) {
+    return;
+  }
+  updateCatalogProblem(assignment.benchmarkId, assignment.itemId, (problem) => ({
+    ...problem,
+    attempted: Math.max(Number(problem.attempted || 0), Number(problem.attempted || 0) + 1),
+    startedByMe: true,
+    submittedByMe: false,
+    myAssignmentId: assignment.id,
+    myStatus: "claimed",
+  }));
+}
+
+function markProblemSubmitted(assignment, submission) {
+  if (!assignment?.benchmarkId || !assignment?.itemId || !submission) {
+    return;
+  }
+  updateCatalogProblem(assignment.benchmarkId, assignment.itemId, (problem) => ({
+    ...problem,
+    startedByMe: true,
+    submittedByMe: true,
+    myAssignmentId: assignment.id,
+    myStatus: submission.gradingStatus || "submitted",
+    successes: submission.successful
+      ? Math.max(Number(problem.successes || 0), Number(problem.successes || 0) + 1)
+      : Number(problem.successes || 0),
+  }));
+}
+
 async function handleAuth(event, mode) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -400,6 +444,7 @@ async function handleStartProblem(benchmarkId, itemId) {
     state.submissionResult = null;
     if (assignment) {
       getAssignmentStart(assignment.id, assignment.claimedAt);
+      markProblemStarted(assignment);
       setMessage("Problem started. Your timer is running.");
       render();
       await refreshStatsIfSignedIn();
@@ -435,6 +480,7 @@ async function handleSubmit(event) {
       }),
     });
     state.submissionResult = submission;
+    markProblemSubmitted(state.activeAssignment, submission);
     delete state.answerDrafts[state.activeAssignment.id];
     state.error = "";
     state.message = "";
