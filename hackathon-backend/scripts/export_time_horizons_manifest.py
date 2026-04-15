@@ -101,6 +101,31 @@ def choose_time_files(task_dir: Path) -> tuple[dict[str, Any] | None, dict[str, 
     return estimated, real
 
 
+def select_system_message(system_messages: Any, preferred_variant: str = "base") -> dict[str, str] | None:
+    if isinstance(system_messages, str) and system_messages.strip():
+        return {"variant": preferred_variant, "text": system_messages}
+
+    if not isinstance(system_messages, dict):
+        return None
+
+    variant = preferred_variant if preferred_variant in system_messages else None
+    if variant is None and "base" in system_messages:
+        variant = "base"
+    if variant is None:
+        variant = next(
+            (key for key, value in system_messages.items() if isinstance(value, str) and value.strip()),
+            None,
+        )
+
+    if variant is None:
+        return None
+
+    text = system_messages.get(variant)
+    if not isinstance(text, str) or not text.strip():
+        return None
+    return {"variant": str(variant), "text": text}
+
+
 def summarize_item_times(time_map: dict[str, Any] | None) -> dict[str, Any] | None:
     if not time_map:
         return None
@@ -374,6 +399,7 @@ def normalize_item(
     grading_mode: str,
     time_map: dict[str, Any] | None,
     visibility: str,
+    system_message: dict[str, str] | None,
 ) -> dict[str, Any]:
     item_key = str(item.get("id") or item.get("instance_id") or item.get("item_id"))
     timing = time_map.get(item_key) if isinstance(time_map, dict) else None
@@ -389,6 +415,8 @@ def normalize_item(
         "input": item.get("input"),
         "metadata": item.get("metadata", {}),
     }
+    if system_message:
+        render_payload["systemMessage"] = system_message
     if "options" in item:
         render_payload["options"] = item["options"]
     if "images" in item:
@@ -437,6 +465,7 @@ def normalize_task(
     meta = load_json(task_dir / "meta.json")
     dataset = problem_items if problem_items is not None else load_json(task_dir / "dataset.json")
     estimated_map, real_map = choose_time_files(task_dir)
+    system_messages = maybe_load_json(task_dir / "system_messages.json")
 
     benchmark_key = benchmark_key_override or meta["name"]
     override = overrides.get(benchmark_key, {})
@@ -452,6 +481,10 @@ def normalize_task(
     )
     grading_mode = override.get("grading_mode", defaults["grading_mode"])
     frontend_mode = override.get("frontend_mode", defaults["frontend_mode"])
+    system_message = select_system_message(
+        system_messages,
+        str(override.get("system_message_variant", "base")),
+    )
     estimated_summary = (
         summarize_problem_config_times(dataset)
         if problem_items is not None
@@ -522,7 +555,7 @@ def normalize_task(
     result = {"benchmark": benchmark}
     if include_items:
         result["items"] = [
-            normalize_item(item, benchmark_key, scorer_type, grading_mode, estimated_map, visibility)
+            normalize_item(item, benchmark_key, scorer_type, grading_mode, estimated_map, visibility, system_message)
             for item in dataset
         ]
     return result

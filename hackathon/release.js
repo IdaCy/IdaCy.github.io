@@ -17,6 +17,7 @@ const state = {
   submissions: [],
   answerDrafts: {},
   timerId: null,
+  loading: false,
   message: "",
   error: "",
 };
@@ -257,11 +258,15 @@ async function loadContestData() {
 }
 
 async function boot() {
+  state.loading = true;
+  render();
   if (!isConfigured()) {
+    state.loading = false;
     render();
     return;
   }
   if (!window.supabase?.createClient) {
+    state.loading = false;
     state.error = "Supabase client failed to load.";
     render();
     return;
@@ -270,10 +275,13 @@ async function boot() {
   const config = getConfig();
   state.client = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
   await refreshSession();
+  render();
   if (state.session) {
     await loadParticipant();
+    render();
     await loadContestData();
   }
+  state.loading = false;
   render();
   window.setInterval(refreshStatsIfSignedIn, 10000);
 }
@@ -306,6 +314,7 @@ function setMessage(message) {
 
 function setError(error) {
   state.error = error instanceof Error ? error.message : String(error);
+  state.loading = false;
   state.message = "";
 }
 
@@ -558,6 +567,23 @@ function renderPromptBlock(block) {
   return `<pre class="prompt-text">${escapeHtml(block.text || "")}</pre>`;
 }
 
+function renderSystemMessage(systemMessage) {
+  const text = String(systemMessage?.text || "").trim();
+  if (!text) {
+    return "";
+  }
+  const variant = String(systemMessage?.variant || "base");
+  return `
+    <section class="system-message-block" aria-label="System message">
+      <div class="system-message-block__header">
+        <span>System message</span>
+        <strong>${escapeHtml(variant)}</strong>
+      </div>
+      <pre class="system-message-text">${escapeHtml(text)}</pre>
+    </section>
+  `;
+}
+
 function getActiveAnswerDraft() {
   if (!state.activeAssignment) {
     return "";
@@ -659,6 +685,7 @@ function renderAssignment() {
             promptTextFromAssignment(assignment),
           ))}</h2>
         </div>
+        ${renderSystemMessage(assignment.systemMessage)}
         <div class="problem-statement">
           ${(assignment.promptBlocks || []).map(renderPromptBlock).join("")}
         </div>
@@ -851,6 +878,9 @@ function renderStatus() {
   if (state.error) {
     return `<div class="submission-empty status-error" role="alert">${escapeHtml(state.error)}</div>`;
   }
+  if (state.loading) {
+    return `<div class="submission-empty status-message" role="status">Loading contest data...</div>`;
+  }
   if (state.message) {
     return `<div class="submission-empty status-message" role="status">${escapeHtml(state.message)}</div>`;
   }
@@ -874,7 +904,7 @@ function renderContestApp(root) {
   root.innerHTML = `
     ${renderStatus()}
     ${state.session ? renderSignedInHeader() : ""}
-    ${!state.session ? renderAuth() : !state.participant ? renderRegistration() : state.activeAssignment ? renderAssignment() : renderProblemsPanel()}
+    ${state.loading ? "" : !state.session ? renderAuth() : !state.participant ? renderRegistration() : state.activeAssignment ? renderAssignment() : renderProblemsPanel()}
     ${state.session && state.participant ? `
       <section class="surface-card">
         <div class="surface-card__header">
@@ -909,9 +939,9 @@ function renderSubmissionsApp(root) {
 
   root.innerHTML = `
     ${renderStatus()}
-    ${state.session ? renderSignedInHeader() : renderAuth()}
-    ${state.session && !state.participant ? renderRegistration() : ""}
-    ${state.session && state.participant ? `
+    ${state.session ? renderSignedInHeader() : state.loading ? "" : renderAuth()}
+    ${state.loading ? "" : state.session && !state.participant ? renderRegistration() : ""}
+    ${!state.loading && state.session && state.participant ? `
       <section class="surface-card">
         <div class="surface-card__header">
           <p class="surface-card__eyebrow">My Submissions</p>

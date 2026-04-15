@@ -32,6 +32,27 @@ function getRangeMedian(range: unknown): number | null {
   return null;
 }
 
+function normalizeSystemMessage(renderPayload: Record<string, unknown>) {
+  const systemMessage = renderPayload.systemMessage;
+  if (typeof systemMessage === "string" && systemMessage.trim()) {
+    return {
+      variant: "base",
+      text: systemMessage,
+    };
+  }
+
+  const record = asObject(systemMessage);
+  const text = String(record.text || "").trim();
+  if (!text) {
+    return null;
+  }
+
+  return {
+    variant: String(record.variant || "base"),
+    text,
+  };
+}
+
 async function signStoragePath(
   serviceClient: SupabaseClient,
   storagePath: string,
@@ -334,6 +355,7 @@ export async function buildFrontendAssignment({
     availability: "api",
     estimatedMinutes: Number(estimatedMinutes.toFixed(2)),
     trackIds,
+    systemMessage: normalizeSystemMessage(renderPayload),
     promptBlocks: await normalizePromptBlocks(serviceClient, renderPayload),
     answerSpec: normalizeAnswerSpec(renderPayload, benchmark),
     grading: {
