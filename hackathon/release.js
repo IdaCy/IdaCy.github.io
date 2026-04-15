@@ -396,7 +396,10 @@ async function loadContestData() {
     .map((result) => result.reason?.message || String(result.reason));
 
   if (activeAssignment.status === "fulfilled") {
-    state.activeAssignment = activeAssignment.value || null;
+    const assignment = activeAssignment.value || null;
+    state.activeAssignment = assignment && !EXCLUDED_BENCHMARK_IDS.has(String(assignment.benchmarkId))
+      ? assignment
+      : null;
   }
   if (submissions.status === "fulfilled") {
     state.submissions = submissions.value || [];

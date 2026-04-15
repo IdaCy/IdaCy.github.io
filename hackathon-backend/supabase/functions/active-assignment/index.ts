@@ -7,6 +7,13 @@ import { requireParticipant } from "../_shared/auth.ts";
 import { HttpError, json } from "../_shared/http.ts";
 import { withRequestPolicy } from "../_shared/policy.ts";
 
+const EXCLUDED_BENCHMARK_KEYS = new Set([
+  "chess_puzzles",
+  "ctrl_alt_deceit_sandbag",
+  "shade_monitor_action_only",
+  "shade_monitor_cot_action",
+]);
+
 async function readOptionalJson(request: Request) {
   const text = await request.text();
   if (!text.trim()) {
@@ -109,6 +116,9 @@ Deno.serve((request) =>
     }
 
     const { benchmark, item } = await loadBenchmarkAndItem(serviceClient, assignment);
+    if (EXCLUDED_BENCHMARK_KEYS.has(String(benchmark.benchmark_key))) {
+      return json(null);
+    }
     return json(
       await buildFrontendAssignment({
         serviceClient,
