@@ -7,6 +7,13 @@ function cleanGroupLabel(value: unknown, fallback: string) {
   return label || fallback;
 }
 
+const EXCLUDED_BENCHMARK_KEYS = new Set([
+  "chess_puzzles",
+  "ctrl_alt_deceit_sandbag",
+  "shade_monitor_action_only",
+  "shade_monitor_cot_action",
+]);
+
 Deno.serve((request) =>
   withRequestPolicy(request, { endpoint: "live-stats", limit: 60, windowSeconds: 300 }, async () => {
     if (request.method !== "GET") {
@@ -50,6 +57,7 @@ Deno.serve((request) =>
     const visibleBenchmarkIds = new Set(
       benchmarks
         .filter((benchmark) =>
+          !EXCLUDED_BENCHMARK_KEYS.has(String(benchmark.benchmark_key)) &&
           (enabledBenchmarkIds.size === 0 || enabledBenchmarkIds.has(benchmark.id)) &&
           (canAccessPrivate || benchmark.visibility !== "private")
         )

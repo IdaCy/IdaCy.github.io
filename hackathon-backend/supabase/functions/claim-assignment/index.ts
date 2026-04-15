@@ -8,6 +8,7 @@ import { withRequestPolicy } from "../_shared/policy.ts";
 
 const EXCLUDED_BENCHMARK_KEYS = new Set([
   "chess_puzzles",
+  "ctrl_alt_deceit_sandbag",
   "shade_monitor_action_only",
   "shade_monitor_cot_action",
 ]);
