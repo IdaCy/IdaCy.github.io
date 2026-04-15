@@ -20,6 +20,7 @@
         "stego_monitor",
         "test_case_prediction",
         "gsm1k",
+        "hash",
         "sally_anne",
         "n_hop_lookup",
         "causal_reasoning",

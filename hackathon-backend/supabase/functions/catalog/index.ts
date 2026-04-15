@@ -11,7 +11,6 @@ function asObject(value: unknown): Record<string, unknown> {
 
 const EXCLUDED_BENCHMARK_KEYS = new Set([
   "chess_puzzles",
-  "hash",
   "shade_monitor_action_only",
   "shade_monitor_cot_action",
 ]);
