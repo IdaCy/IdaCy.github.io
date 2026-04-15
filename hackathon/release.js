@@ -1,6 +1,7 @@
 const TIMER_KEY_PREFIX = "time-horizons-assignment-started-at:";
 const EXCLUDED_BENCHMARK_IDS = new Set([
   "chess_puzzles",
+  "hash",
   "shade_monitor_action_only",
   "shade_monitor_cot_action",
 ]);
