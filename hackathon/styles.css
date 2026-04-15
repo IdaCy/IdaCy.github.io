@@ -80,6 +80,7 @@ a {
   text-decoration: none;
   color: var(--ink-soft);
   font-weight: 600;
+  cursor: pointer;
 }
 
 .site-header__home {
