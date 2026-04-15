@@ -564,7 +564,15 @@ function renderPromptBlock(block) {
       </figure>
     `;
   }
-  return `<pre class="prompt-text">${escapeHtml(block.text || "")}</pre>`;
+  return `
+    <section class="copyable-text-block">
+      <div class="copyable-text-block__header">
+        <span>Problem text</span>
+        <button class="copy-text-button" type="button" data-copy-text>Copy</button>
+      </div>
+      <pre class="prompt-text">${escapeHtml(block.text || "")}</pre>
+    </section>
+  `;
 }
 
 function renderSystemMessage(systemMessage) {
@@ -578,6 +586,7 @@ function renderSystemMessage(systemMessage) {
       <div class="system-message-block__header">
         <span>System message</span>
         <strong>${escapeHtml(variant)}</strong>
+        <button class="copy-text-button" type="button" data-copy-text>Copy</button>
       </div>
       <pre class="system-message-text">${escapeHtml(text)}</pre>
     </section>
@@ -975,7 +984,31 @@ function bind(root) {
   root.querySelectorAll("[data-start-problem]").forEach((button) => {
     button.addEventListener("click", () => handleStartProblem(button.dataset.benchmarkId, button.dataset.itemId));
   });
+  root.querySelectorAll("[data-copy-text]").forEach((button) => {
+    button.addEventListener("click", () => handleCopyText(button));
+  });
   root.querySelector("[data-sign-out]")?.addEventListener("click", handleSignOut);
+}
+
+async function handleCopyText(button) {
+  const block = button.closest(".copyable-text-block, .system-message-block");
+  const textNode = block?.querySelector(".prompt-text, .system-message-text");
+  const text = textNode?.textContent || "";
+  if (!text) {
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    button.textContent = "Copied";
+    window.setTimeout(() => {
+      button.textContent = "Copy";
+    }, 1600);
+  } catch (_error) {
+    button.textContent = "Copy failed";
+    window.setTimeout(() => {
+      button.textContent = "Copy";
+    }, 2000);
+  }
 }
 
 function bindGlobalNav() {

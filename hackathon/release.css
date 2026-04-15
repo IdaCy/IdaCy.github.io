@@ -218,6 +218,46 @@
   padding-left: 20px;
 }
 
+.copyable-text-block {
+  display: grid;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.copyable-text-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+  color: var(--ink-soft);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.copy-text-button {
+  min-height: 28px;
+  border: 1px solid rgba(47, 90, 68, 0.28);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 249, 239, 0.72);
+  color: var(--leaf);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 4px 9px;
+}
+
+.copy-text-button:hover {
+  border-color: rgba(47, 90, 68, 0.48);
+  background: rgba(47, 90, 68, 0.1);
+}
+
 .system-message-block {
   display: grid;
   gap: 8px;
@@ -232,11 +272,15 @@
 .system-message-block__header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 10px;
   color: var(--leaf);
   font-size: 0.88rem;
   font-weight: 700;
+}
+
+.system-message-block__header .copy-text-button {
+  margin-left: auto;
 }
 
 .system-message-block__header strong {
@@ -439,8 +483,8 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border: 0;
+  border-radius: 0;
   background: var(--panel);
   color: var(--ink);
   font: 0.96rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
