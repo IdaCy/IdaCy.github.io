@@ -244,16 +244,31 @@ async function loadContestData() {
   if (!state.participant) {
     return;
   }
-  const [catalog, activeAssignment, submissions, stats] = await Promise.all([
-    apiFetch("catalog"),
+  const catalog = await apiFetch("catalog");
+  state.catalog = catalog || [];
+
+  const [activeAssignment, submissions, stats] = await Promise.allSettled([
     apiFetch("active-assignment"),
     apiFetch("my-submissions"),
     apiFetch("live-stats"),
   ]);
-  state.catalog = catalog || [];
-  state.activeAssignment = activeAssignment || null;
-  state.submissions = submissions || [];
-  state.stats = stats || null;
+  const failures = [activeAssignment, submissions, stats]
+    .filter((result) => result.status === "rejected")
+    .map((result) => result.reason?.message || String(result.reason));
+
+  if (activeAssignment.status === "fulfilled") {
+    state.activeAssignment = activeAssignment.value || null;
+  }
+  if (submissions.status === "fulfilled") {
+    state.submissions = submissions.value || [];
+  }
+  if (stats.status === "fulfilled") {
+    state.stats = stats.value || null;
+  }
+  if (failures.length) {
+    state.message = `Problems loaded. Some status data did not load yet: ${failures.join("; ")}`;
+    state.error = "";
+  }
 }
 
 async function boot() {
