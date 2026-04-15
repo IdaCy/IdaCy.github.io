@@ -952,6 +952,28 @@ function bindGlobalNav() {
   });
 }
 
+function captureProblemScroll() {
+  const selectors = [".problem-statement", ".prompt-text"];
+  return selectors.map((selector) => {
+    const node = document.querySelector(selector);
+    return {
+      selector,
+      top: node?.scrollTop || 0,
+      left: node?.scrollLeft || 0,
+    };
+  });
+}
+
+function restoreProblemScroll(scrollState) {
+  for (const entry of scrollState || []) {
+    const node = document.querySelector(entry.selector);
+    if (node) {
+      node.scrollTop = entry.top;
+      node.scrollLeft = entry.left;
+    }
+  }
+}
+
 function render() {
   const contestRoot = document.querySelector("[data-contest-app]");
   const submissionsRoot = document.querySelector("[data-submissions-app]");
@@ -959,6 +981,7 @@ function render() {
   if (!root) {
     return;
   }
+  const problemScroll = state.activeAssignment ? captureProblemScroll() : [];
   if (state.timerId) {
     window.clearInterval(state.timerId);
     state.timerId = null;
@@ -970,6 +993,9 @@ function render() {
   if (submissionsRoot) {
     renderSubmissionsApp(submissionsRoot);
     bind(submissionsRoot);
+  }
+  if (state.activeAssignment) {
+    restoreProblemScroll(problemScroll);
   }
   if (state.activeAssignment) {
     state.timerId = window.setInterval(() => {
