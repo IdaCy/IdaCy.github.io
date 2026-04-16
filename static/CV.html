@@ -1,22 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CV</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-        }
-        iframe {
-            border: none;
-            width: 100vw;
-            height: 100vh;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CV</title>
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+    }
+
+    body {
+      background: #f7f7f7;
+    }
+
+    object {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+
+    .fallback {
+      margin: 0;
+      padding: 24px;
+      font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #1f2933;
+    }
+  </style>
 </head>
 <body>
-    <iframe src="cv.pdf"></iframe>
+  <object data="cv.pdf" type="application/pdf" aria-label="CV">
+    <p class="fallback">
+      <a href="cv.pdf">Open the CV as a PDF.</a>
+    </p>
+  </object>
 </body>
 </html>
