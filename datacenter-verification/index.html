@@ -38,7 +38,7 @@
             <strong id="hud-gpus">0</strong>
           </div>
           <div>
-            <span class="hud-label">Fabric Sync</span>
+            <span class="hud-label">Fabric Signal</span>
             <strong id="hud-fabric">0%</strong>
           </div>
           <div>
@@ -51,13 +51,13 @@
           </div>
         </div>
         <div class="legend" aria-label="Evidence color legend">
-          <span><i class="legend-swatch allocation"></i>Allocation</span>
-          <span><i class="legend-swatch activity"></i>GPU activity</span>
-          <span><i class="legend-swatch fabric"></i>Fabric</span>
-          <span><i class="legend-swatch power"></i>Power</span>
-          <span><i class="legend-swatch storage"></i>Storage</span>
-          <span><i class="legend-swatch integrity"></i>Integrity</span>
-          <span><i class="legend-swatch neutral"></i>Inactive capacity</span>
+          <span title="Allocated rack capacity"><i class="legend-swatch allocation"></i>Allocation</span>
+          <span title="GPU utilization and tensor activity"><i class="legend-swatch activity"></i>GPU activity</span>
+          <span title="Collective periodicity or synchronized fabric footprint"><i class="legend-swatch fabric"></i>Fabric</span>
+          <span title="Rack and facility power corroboration"><i class="legend-swatch power"></i>Power</span>
+          <span title="Checkpoint or storage cadence"><i class="legend-swatch storage"></i>Storage</span>
+          <span title="Coverage and monitoring-integrity warnings"><i class="legend-swatch integrity"></i>Integrity</span>
+          <span title="Installed capacity not active in the selected window"><i class="legend-swatch neutral"></i>Inactive capacity</span>
         </div>
       </section>
 
@@ -79,6 +79,7 @@
             Datapoint
             <select id="row-select"></select>
           </label>
+          <p id="filter-status" class="filter-status" aria-live="polite"></p>
         </section>
 
         <section class="quick-picks" aria-label="Label example buttons">
@@ -93,6 +94,7 @@
         <section class="judgement">
           <div class="judgement-main">
             <p id="result-mode" class="eyebrow">Calibrated model replay</p>
+            <p id="mode-detail" class="mode-detail">Selected datapoint replays the trained model export.</p>
             <h2 id="result-label">Loading</h2>
             <div class="risk-meter" aria-label="Large training probability">
               <div id="risk-fill"></div>

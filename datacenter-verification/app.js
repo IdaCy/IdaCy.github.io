@@ -2,6 +2,7 @@
 const {
   asBool,
   asNumber,
+  clamp,
   deriveFeatureState,
   formatNumber,
   formatPercent,
@@ -193,8 +194,10 @@ function bindDom() {
     "scenario-select",
     "window-select",
     "row-select",
+    "filter-status",
     "reset-row",
     "result-mode",
+    "mode-detail",
     "result-label",
     "risk-fill",
     "p-large",
@@ -230,7 +233,9 @@ function populateSelectors() {
   dom.siteSelect.addEventListener("change", () => renderRowOptions());
   dom.scenarioSelect.addEventListener("change", () => renderRowOptions());
   dom.windowSelect.addEventListener("change", () => renderRowOptions());
-  dom.rowSelect.addEventListener("change", () => setActiveRowById(dom.rowSelect.value));
+  dom.rowSelect.addEventListener("change", () => {
+    if (dom.rowSelect.value) setActiveRowById(dom.rowSelect.value);
+  });
 }
 
 function populateQuickPicks() {
@@ -245,6 +250,22 @@ function populateQuickPicks() {
 
 function renderRowOptions() {
   const rows = filteredRows();
+  updateFilterStatus(rows.length, Math.min(rows.length, 700));
+  if (!rows.length) {
+    setOptions(dom.rowSelect, [["", "No matching datapoints"]]);
+    dom.rowSelect.disabled = true;
+    setControlsDisabled(true);
+    dom.resetRow.disabled = true;
+    activeRow = null;
+    activeFeatures = emptyFeatureState();
+    sandboxDirty = false;
+    syncControls();
+    renderEmptyState();
+    return;
+  }
+  dom.rowSelect.disabled = false;
+  setControlsDisabled(false);
+  dom.resetRow.disabled = false;
   const limitedRows = rows.slice(0, 700);
   setOptions(
     dom.rowSelect,
@@ -285,6 +306,10 @@ function setActiveRowById(rowId, options = {}) {
 }
 
 function setActiveRow(row, options = {}) {
+  if (!row) {
+    renderEmptyState();
+    return;
+  }
   activeRow = row;
   if (options.resetFeatures) {
     activeFeatures = deriveFeatureState(clone(row.features));
@@ -353,13 +378,20 @@ function applyControlValue(def, input) {
   if (def.type === "checkbox") activeFeatures[def.key] = input.checked;
   else if (def.type === "range") activeFeatures[def.key] = Number(input.value);
   else activeFeatures[def.key] = input.value;
-  activeFeatures = deriveFeatureState(activeFeatures);
+  applyCoherentSideEffects(def.key);
   updateCoverageFields(def.key);
+  activeFeatures = deriveFeatureState(activeFeatures);
   syncDerivedControlValues();
 }
 
 function syncDerivedControlValues() {
   for (const def of controlDefs) {
+    const input = dom.controlsRoot.querySelector(`[data-key="${def.key}"]`);
+    const value = activeFeatures[def.key];
+    if (input) {
+      if (def.type === "checkbox") input.checked = asBool(value);
+      else input.value = value ?? "";
+    }
     updateControlValue(def);
   }
 }
@@ -395,11 +427,18 @@ function updateCoverageFields(changedKey) {
 }
 
 function renderDashboard() {
+  if (!activeRow) {
+    renderEmptyState();
+    return;
+  }
   const replay = replayResult(activeRow);
   const result = sandboxDirty ? scoreFeatures(activeFeatures) : replay;
   const features = sandboxDirty ? result.features : replay.features;
 
   dom.resultMode.textContent = sandboxDirty ? "Rule sandbox" : "Calibrated model replay";
+  dom.modeDetail.textContent = sandboxDirty
+    ? "Manual edits use the browser rule sandbox; selected datapoints replay the trained model export."
+    : "Selected datapoint replays the trained model export.";
   dom.resultLabel.textContent = `L${result.label}: ${labelName(result.label)}`;
   dom.resultLabel.style.color = labelColor(result.label);
   dom.riskFill.style.width = formatPercent(result.pLarge, 1);
@@ -453,9 +492,163 @@ function renderList(root, items, warnings) {
 
 function updateHud(features) {
   dom.hudGpus.textContent = formatNumber(asNumber(features.o2_max_concurrent_normalized_gpus), 0);
-  dom.hudFabric.textContent = formatPercent(asNumber(features.o7_collective_periodicity_score), 0);
+  dom.hudFabric.textContent = formatPercent(fabricSignal(features), 0);
   dom.hudPower.textContent = formatPercent(asNumber(features.o8_rack_power_fraction_p95), 0);
   dom.hudCoverage.textContent = formatPercent(asNumber(features.o14_min_critical_coverage, 1), 0);
+}
+
+function renderEmptyState() {
+  const features = emptyFeatureState();
+  const result = {
+    label: 0,
+    pLarge: 0,
+    severity: 0,
+    negativeCertificationConfidence: 0,
+    capacityPossible: false,
+    integrityWarning: false,
+    probabilities: [0, 0, 0, 0, 0],
+    criticalMissingLayers: [],
+    topEvidence: [],
+  };
+  dom.resultMode.textContent = "No matching datapoint";
+  dom.modeDetail.textContent = "Adjust the filters to select a synthetic window.";
+  dom.resultLabel.textContent = "No datapoint for these filters";
+  dom.resultLabel.style.color = "var(--muted)";
+  dom.riskFill.style.width = "0%";
+  dom.riskFill.style.backgroundColor = "var(--muted)";
+  dom.pLarge.textContent = "0%";
+  dom.severityScore.textContent = "0.00";
+  dom.negativeConfidence.textContent = "0%";
+  dom.integrityStatus.textContent = "Clear";
+  dom.integrityStatus.style.color = "var(--ok)";
+  dom.capacityStatus.textContent = "Unknown";
+  dom.capacityStatus.style.color = "var(--muted)";
+  dom.policyRatio.textContent = "Policy ratio 0.00";
+  renderProbabilityBars(result.probabilities);
+  renderList(dom.evidenceList, ["no datapoint selected"], false);
+  renderList(dom.missingList, ["none flagged"], true);
+  updateHud(features);
+  scene.update(features, result);
+}
+
+function updateFilterStatus(totalRows, shownRows) {
+  if (!dom.filterStatus) return;
+  if (totalRows === 0) {
+    dom.filterStatus.textContent = "No datapoints match these filters.";
+  } else if (totalRows > shownRows) {
+    dom.filterStatus.textContent = `Showing first ${formatNumber(shownRows)} of ${formatNumber(totalRows)} matching datapoints.`;
+  } else {
+    dom.filterStatus.textContent = `${formatNumber(totalRows)} matching datapoints.`;
+  }
+}
+
+function setControlsDisabled(disabled) {
+  dom.controlsRoot.querySelectorAll("input, select").forEach((input) => {
+    input.disabled = disabled;
+  });
+}
+
+function applyCoherentSideEffects(changedKey) {
+  if (changedKey === "o1_normalized_h100e_capacity") {
+    const capacity = Math.max(0, asNumber(activeFeatures.o1_normalized_h100e_capacity));
+    const partitioned = clamp(asNumber(activeFeatures.o1_non_partitioned_fraction, 1), 0.1, 1);
+    activeFeatures.o1_largest_contiguous_domain_gpus = Math.round(capacity * partitioned);
+  }
+
+  if (changedKey === "o2_max_concurrent_normalized_gpus") {
+    const allocation = Math.max(0, asNumber(activeFeatures.o2_max_concurrent_normalized_gpus));
+    activeFeatures.o10_world_size = Math.round(allocation);
+    activeFeatures.o10_same_image_gpu_count = Math.round(allocation);
+    activeFeatures.o7_synchronized_fabric_footprint = Math.min(
+      asNumber(activeFeatures.o7_synchronized_fabric_footprint),
+      allocation
+    );
+    if (allocation < 1) {
+      activeFeatures.o4_gpu_util_p95 = 0;
+      activeFeatures.o4_gpu_util_duty_gt_70 = 0;
+      activeFeatures.o4_gpu_util_p50 = 0;
+      activeFeatures.o4_sm_tensor_active_p95 = 0;
+      activeFeatures.o4_hbm_bandwidth_active_p95 = 0;
+      activeFeatures.o4_hbm_used_fraction_p50 = 0;
+      activeFeatures.o7_synchronized_fabric_footprint = 0;
+      activeFeatures.o7_collective_periodicity_score = 0;
+      activeFeatures.o7_scaleout_port_util_p95 = 0;
+      activeFeatures.o11_checkpoint_periodicity_score = 0;
+      activeFeatures.o11_checkpoint_write_tb_per_event = 0;
+      activeFeatures.o11_read_write_training_pattern_score = 0;
+      activeFeatures.o8_rack_power_fraction_p95 = Math.min(asNumber(activeFeatures.o8_rack_power_fraction_p95), 0.25);
+    }
+  }
+
+  if (changedKey === "o4_gpu_util_p95") {
+    const util = clamp(asNumber(activeFeatures.o4_gpu_util_p95) / 100);
+    activeFeatures.o4_gpu_util_duty_gt_70 = util >= 0.7
+      ? Math.max(asNumber(activeFeatures.o4_gpu_util_duty_gt_70), 0.5)
+      : Math.min(asNumber(activeFeatures.o4_gpu_util_duty_gt_70), util / 1.4);
+    if (util < 0.3) {
+      activeFeatures.o4_gpu_util_p50 = Math.min(asNumber(activeFeatures.o4_gpu_util_p50), util * 100);
+      activeFeatures.o4_sm_tensor_active_p95 = Math.min(asNumber(activeFeatures.o4_sm_tensor_active_p95), util * 60);
+      activeFeatures.o4_hbm_bandwidth_active_p95 = Math.min(asNumber(activeFeatures.o4_hbm_bandwidth_active_p95), util);
+    }
+  }
+
+  if (changedKey === "o7_synchronized_fabric_footprint" || changedKey === "o7_collective_periodicity_score") {
+    const capacity = Math.max(1, asNumber(activeFeatures.o1_normalized_h100e_capacity, 1));
+    const footprint = Math.max(0, asNumber(activeFeatures.o7_synchronized_fabric_footprint));
+    const periodicity = clamp(asNumber(activeFeatures.o7_collective_periodicity_score));
+    if (changedKey === "o7_synchronized_fabric_footprint" && footprint < 64) {
+      activeFeatures.o7_collective_periodicity_score = Math.min(periodicity, footprint / capacity);
+      activeFeatures.o7_scaleout_port_util_p95 = Math.min(asNumber(activeFeatures.o7_scaleout_port_util_p95), footprint / capacity);
+    }
+    if (changedKey === "o7_collective_periodicity_score" && periodicity < 0.2) {
+      activeFeatures.o7_synchronized_fabric_footprint = Math.min(footprint, Math.round(capacity * periodicity));
+      activeFeatures.o7_scaleout_port_util_p95 = Math.min(asNumber(activeFeatures.o7_scaleout_port_util_p95), periodicity + 0.05);
+    }
+  }
+
+  if (changedKey === "o8_rack_power_fraction_p95") {
+    const power = clamp(asNumber(activeFeatures.o8_rack_power_fraction_p95));
+    activeFeatures.o4_gpu_power_fraction_p95 = Math.min(asNumber(activeFeatures.o4_gpu_power_fraction_p95), Math.max(power, 0.18));
+    activeFeatures.o9_cooling_flow_duty = Math.min(asNumber(activeFeatures.o9_cooling_flow_duty), Math.max(power, 0.12));
+  }
+
+  if (changedKey === "o11_checkpoint_periodicity_score") {
+    const checkpoint = clamp(asNumber(activeFeatures.o11_checkpoint_periodicity_score));
+    if (checkpoint < 0.1) {
+      activeFeatures.o11_checkpoint_write_tb_per_event = 0;
+      activeFeatures.o11_read_write_training_pattern_score = 0;
+    }
+  }
+}
+
+function fabricSignal(features) {
+  const capacity = Math.max(1, asNumber(features.o1_normalized_h100e_capacity, 1));
+  return Math.max(
+    clamp(asNumber(features.o7_collective_periodicity_score)),
+    clamp(asNumber(features.o7_synchronized_fabric_footprint) / capacity)
+  );
+}
+
+function emptyFeatureState() {
+  return deriveFeatureState({
+    o1_normalized_h100e_capacity: 1,
+    o1_largest_contiguous_domain_gpus: 0,
+    o1_non_partitioned_fraction: 1,
+    o2_max_concurrent_normalized_gpus: 0,
+    o2_allocation_duration_hours: 0,
+    o4_gpu_util_p95: 0,
+    o4_sm_tensor_active_p95: 0,
+    o4_missing_reason: "observed",
+    o7_synchronized_fabric_footprint: 0,
+    o7_collective_periodicity_score: 0,
+    o8_rack_power_fraction_p95: 0,
+    o11_checkpoint_periodicity_score: 0,
+    o12_signed_ml_logs_present: false,
+    o13_confidential_compute_mode_fraction: 0,
+    o14_min_critical_coverage: 1,
+    o14_gap_fraction_critical: 0,
+    capacity_possible: false,
+  });
 }
 
 function setOptions(select, options) {
