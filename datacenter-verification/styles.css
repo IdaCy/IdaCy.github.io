@@ -199,6 +199,7 @@ select {
 .power { background: var(--power); }
 .storage { background: var(--storage); }
 .integrity { background: var(--integrity); }
+.neutral { background: #9aa39f; }
 
 .control-panel {
   min-height: 0;
@@ -457,4 +458,3 @@ label {
     text-align: left;
   }
 }
-

@@ -88,11 +88,11 @@ class DatacenterScene {
     const rackGeometry = new THREE.BoxGeometry(0.42, 1.2, 0.48);
     const activityGeometry = new THREE.BoxGeometry(0.46, 0.08, 0.52);
     const baseMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8e9994,
+      color: 0x9aa39f,
       roughness: 0.58,
       metalness: 0.18,
       transparent: true,
-      opacity: 0.78,
+      opacity: 0.74,
     });
     const activityMaterial = new THREE.MeshBasicMaterial({
       color: 0x14966f,
@@ -121,11 +121,11 @@ class DatacenterScene {
   createStorageBay() {
     const slotGeometry = new THREE.BoxGeometry(0.42, 0.22, 0.42);
     const slotMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8f8797,
+      color: 0x9aa39f,
       roughness: 0.72,
       metalness: 0.06,
       transparent: true,
-      opacity: 0.54,
+      opacity: 0.68,
     });
     for (let index = 0; index < 9; index += 1) {
       const slot = new THREE.Mesh(slotGeometry, slotMaterial.clone());
@@ -180,7 +180,7 @@ class DatacenterScene {
     const activeFraction = clamp(allocation / capacity);
     const activeRacks = Math.round(activeFraction * RACK_COUNT);
     const allocationColor = new THREE.Color(0x3c78a8);
-    const inactiveColor = new THREE.Color(0x8e9994);
+    const inactiveColor = new THREE.Color(0x9aa39f);
 
     this.racks.forEach((rack, index) => {
       const active = index < activeRacks;
@@ -191,7 +191,7 @@ class DatacenterScene {
         target.copy(allocationColor);
       }
       material.color.copy(target);
-      material.opacity = active ? 0.88 : 0.28;
+      material.opacity = active ? 0.88 : 0.66;
       rack.scale.y = active ? 1 + gpuUtil * 0.42 : 0.72;
       rack.position.y = rack.userData.baseY + (rack.scale.y - 1) * 0.58;
       activityCap.visible = active && gpuUtil > 0.04;
@@ -199,7 +199,7 @@ class DatacenterScene {
       activityCap.position.set(rack.position.x, rack.position.y + rack.scale.y * 0.62 + 0.045, rack.position.z);
     });
 
-    this.powerPlane.material.opacity = power * 0.32;
+    this.powerPlane.material.opacity = power * 0.24;
     this.integrityFrame.material.opacity = result.integrityWarning || coverage < 0.8 ? 0.84 : 0;
     this.updateFabricLines(activeRacks, fabric);
     this.updateStorageMarkers(checkpoint, result.label);
