@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Datacenter Training-Run Verification Demo</title>
+  <meta
+    name="description"
+    content="Interactive synthetic demo for layered verification of large AI training runs on monitored GPU clusters."
+  >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Synthetic v0</p>
+        <h1>Datacenter Training-Run Verification</h1>
+      </div>
+      <div class="topbar-actions">
+        <span id="dataset-status">Loading dataset</span>
+        <a href="https://github.com/IdaCy/datacenter-verification" target="_blank" rel="noreferrer">GitHub Repo</a>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="visual-panel" aria-label="3D datacenter evidence schematic">
+        <div id="scene-root"></div>
+        <div class="scene-hud">
+          <div>
+            <span class="hud-label">Active GPUs</span>
+            <strong id="hud-gpus">0</strong>
+          </div>
+          <div>
+            <span class="hud-label">Fabric Sync</span>
+            <strong id="hud-fabric">0%</strong>
+          </div>
+          <div>
+            <span class="hud-label">Rack Power</span>
+            <strong id="hud-power">0%</strong>
+          </div>
+          <div>
+            <span class="hud-label">Coverage</span>
+            <strong id="hud-coverage">0%</strong>
+          </div>
+        </div>
+        <div class="legend" aria-label="Evidence color legend">
+          <span><i class="legend-swatch allocation"></i>Allocation</span>
+          <span><i class="legend-swatch activity"></i>GPU activity</span>
+          <span><i class="legend-swatch fabric"></i>Fabric</span>
+          <span><i class="legend-swatch power"></i>Power</span>
+          <span><i class="legend-swatch storage"></i>Storage</span>
+          <span><i class="legend-swatch integrity"></i>Integrity</span>
+        </div>
+      </section>
+
+      <section class="control-panel" aria-label="Data controls and verification result">
+        <section class="selectors">
+          <label>
+            Site
+            <select id="site-select"></select>
+          </label>
+          <label>
+            Scenario
+            <select id="scenario-select"></select>
+          </label>
+          <label>
+            Window
+            <select id="window-select"></select>
+          </label>
+          <label>
+            Datapoint
+            <select id="row-select"></select>
+          </label>
+        </section>
+
+        <section class="quick-picks" aria-label="Label example buttons">
+          <button type="button" data-example-label="0">Label 0</button>
+          <button type="button" data-example-label="1">Label 1</button>
+          <button type="button" data-example-label="2">Label 2</button>
+          <button type="button" data-example-label="3">Label 3</button>
+          <button type="button" data-example-label="4">Label 4</button>
+          <button type="button" id="reset-row">Reset Row</button>
+        </section>
+
+        <section class="judgement">
+          <div class="judgement-main">
+            <p id="result-mode" class="eyebrow">Calibrated model replay</p>
+            <h2 id="result-label">Loading</h2>
+            <div class="risk-meter" aria-label="Large training probability">
+              <div id="risk-fill"></div>
+            </div>
+            <div class="risk-row">
+              <span>Large training probability</span>
+              <strong id="p-large">0%</strong>
+            </div>
+          </div>
+          <div class="metric-grid">
+            <div>
+              <span>Severity</span>
+              <strong id="severity-score">0.00</strong>
+            </div>
+            <div>
+              <span>No-run confidence</span>
+              <strong id="negative-confidence">0%</strong>
+            </div>
+            <div>
+              <span>Integrity</span>
+              <strong id="integrity-status">Clear</strong>
+            </div>
+            <div>
+              <span>Capacity</span>
+              <strong id="capacity-status">Unknown</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="probability-panel" aria-label="Label probabilities">
+          <div id="probability-bars"></div>
+        </section>
+
+        <section class="control-surface">
+          <div class="section-heading">
+            <h2>Evidence Inputs</h2>
+            <span id="policy-ratio">Policy ratio 0.00</span>
+          </div>
+          <div id="controls-root"></div>
+        </section>
+
+        <section class="evidence-panel">
+          <div>
+            <h2>Top Evidence</h2>
+            <ul id="evidence-list"></ul>
+          </div>
+          <div>
+            <h2>Missing Layers</h2>
+            <ul id="missing-list"></ul>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <noscript>
+    <p class="noscript">This interactive demo needs JavaScript enabled.</p>
+  </noscript>
+
+  <script src="./vendor/three.min.js" defer></script>
+  <script src="./vendor/OrbitControls.js" defer></script>
+  <script src="./data/demo-data.js" defer></script>
+  <script src="./scoring.js" defer></script>
+  <script src="./scene.js" defer></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>
