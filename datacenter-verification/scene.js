@@ -1,5 +1,5 @@
 (function () {
-const { asNumber, clamp, labelColor } = window.DCVScoring;
+const { asNumber, clamp } = window.DCVScoring;
 
 const RACK_COUNT = 48;
 
@@ -23,6 +23,7 @@ class DatacenterScene {
     this.controls.maxPolarAngle = Math.PI * 0.49;
 
     this.racks = [];
+    this.activityCaps = [];
     this.storageSlots = [];
     this.fabricGroup = new THREE.Group();
     this.markerGroup = new THREE.Group();
@@ -85,6 +86,7 @@ class DatacenterScene {
 
   createRacks() {
     const rackGeometry = new THREE.BoxGeometry(0.42, 1.2, 0.48);
+    const activityGeometry = new THREE.BoxGeometry(0.46, 0.08, 0.52);
     const baseMaterial = new THREE.MeshStandardMaterial({
       color: 0x8e9994,
       roughness: 0.58,
@@ -92,16 +94,27 @@ class DatacenterScene {
       transparent: true,
       opacity: 0.78,
     });
+    const activityMaterial = new THREE.MeshBasicMaterial({
+      color: 0x14966f,
+      transparent: true,
+      opacity: 0,
+    });
     for (let index = 0; index < RACK_COUNT; index += 1) {
       const col = index % 12;
       const row = Math.floor(index / 12);
       const rack = new THREE.Mesh(rackGeometry, baseMaterial.clone());
+      const activityCap = new THREE.Mesh(activityGeometry, activityMaterial.clone());
       rack.castShadow = true;
       rack.receiveShadow = true;
       rack.position.set(-4.05 + col * 0.74, 0.58, -2.02 + row * 1.35);
       rack.userData.baseY = rack.position.y;
+      activityCap.position.set(rack.position.x, 1.24, rack.position.z);
+      activityCap.visible = false;
+      activityCap.castShadow = true;
       this.racks.push(rack);
+      this.activityCaps.push(activityCap);
       this.root.add(rack);
+      this.root.add(activityCap);
     }
   }
 
@@ -166,22 +179,24 @@ class DatacenterScene {
     const coverage = clamp(asNumber(features.o14_min_critical_coverage, 1));
     const activeFraction = clamp(allocation / capacity);
     const activeRacks = Math.round(activeFraction * RACK_COUNT);
-    const color = new THREE.Color(labelColor(result.label));
-    const activityColor = new THREE.Color(0x14966f);
     const allocationColor = new THREE.Color(0x3c78a8);
     const inactiveColor = new THREE.Color(0x8e9994);
 
     this.racks.forEach((rack, index) => {
       const active = index < activeRacks;
+      const activityCap = this.activityCaps[index];
       const material = rack.material;
       const target = inactiveColor.clone();
       if (active) {
-        target.copy(allocationColor).lerp(activityColor, gpuUtil).lerp(color, Math.max(0, result.pLarge - 0.35));
+        target.copy(allocationColor);
       }
       material.color.copy(target);
-      material.opacity = active ? 0.86 : 0.34;
+      material.opacity = active ? 0.88 : 0.28;
       rack.scale.y = active ? 1 + gpuUtil * 0.42 : 0.72;
       rack.position.y = rack.userData.baseY + (rack.scale.y - 1) * 0.58;
+      activityCap.visible = active && gpuUtil > 0.04;
+      activityCap.material.opacity = active ? 0.28 + gpuUtil * 0.7 : 0;
+      activityCap.position.set(rack.position.x, rack.position.y + rack.scale.y * 0.62 + 0.045, rack.position.z);
     });
 
     this.powerPlane.material.opacity = power * 0.32;
@@ -219,20 +234,18 @@ class DatacenterScene {
     this.markerGroup.clear();
     const count = Math.min(9, Math.round(checkpoint * 10));
     if (!count) return;
-    const geometry = new THREE.BoxGeometry(0.34, 0.08, 0.34);
-    const material = new THREE.MeshStandardMaterial({
-      color: label >= 4 ? 0x5c6f38 : 0x8c5fb7,
-      roughness: 0.5,
-      metalness: 0.05,
-      emissive: label >= 4 ? 0x1f2f12 : 0x2b173c,
-      emissiveIntensity: 0.22,
+    const geometry = new THREE.BoxGeometry(0.42, 0.1, 0.42);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x8c5fb7,
+      transparent: true,
+      opacity: 0.92,
     });
     for (let index = 0; index < count; index += 1) {
       const marker = new THREE.Mesh(geometry, material.clone());
       const slot = this.storageSlots[index];
       const x = slot ? slot.position.x : -3.7 + index * 0.92;
       const z = slot ? slot.position.z : 2.45;
-      marker.position.set(x, 0.29 + index * 0.018, z);
+      marker.position.set(x, 0.37 + index * 0.018, z);
       marker.castShadow = true;
       this.markerGroup.add(marker);
     }
