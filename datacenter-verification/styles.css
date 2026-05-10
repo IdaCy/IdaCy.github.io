@@ -199,7 +199,10 @@ select {
 .power { background: var(--power); }
 .storage { background: var(--storage); }
 .integrity { background: var(--integrity); }
-.neutral { background: #9aa39f; }
+.neutral {
+  background: #9aa39f;
+  border: 1px solid #5f6964;
+}
 
 .control-panel {
   min-height: 0;
