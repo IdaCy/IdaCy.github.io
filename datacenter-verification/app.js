@@ -466,10 +466,15 @@ async function loadRuntimeConfig() {
 }
 
 function handleControlEdit(def, input) {
-  applyControlValue(def, input);
+  const previousValue = activeFeatures[def.key];
+  const nextValue = controlInputValue(def, input);
+  if (controlValuesEqual(previousValue, nextValue)) {
+    updateControlValue(def);
+    return;
+  }
+  applyControlValue(def, input, nextValue);
   sandboxDirty = true;
   editRevision += 1;
-  liveInference.result = null;
   liveInference.error = "";
   scheduleLiveInference();
   renderDashboard();
@@ -486,10 +491,28 @@ function syncControls() {
   }
 }
 
-function applyControlValue(def, input) {
-  if (def.type === "checkbox") activeFeatures[def.key] = input.checked;
-  else if (def.type === "range") activeFeatures[def.key] = Number(input.value);
-  else activeFeatures[def.key] = input.value;
+function controlInputValue(def, input) {
+  if (def.type === "checkbox") return input.checked;
+  if (def.type === "range") return Number(input.value);
+  return input.value;
+}
+
+function controlValuesEqual(left, right) {
+  if (typeof left === "boolean" || typeof right === "boolean") {
+    return asBool(left) === asBool(right);
+  }
+  if (typeof left === "number" || typeof right === "number") {
+    const leftNumber = Number(left);
+    const rightNumber = Number(right);
+    if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+      return Math.abs(leftNumber - rightNumber) < 1e-9;
+    }
+  }
+  return String(left ?? "") === String(right ?? "");
+}
+
+function applyControlValue(def, input, value = controlInputValue(def, input)) {
+  activeFeatures[def.key] = value;
   applyCoherentSideEffects(def.key);
   updateCoverageFields(def.key);
   activeFeatures = deriveFeatureState(activeFeatures);
@@ -621,29 +644,29 @@ function currentDisplayResult(replay) {
     };
   }
 
-  const fallback = scoreFeatures(activeFeatures);
-  let modeText = "offline rule sandbox";
-  let detailText = `No inference API URL configured; manual edits use browser rules. Source datapoint: ${sourceRowSummary(activeRow)}.`;
-  let bannerPrefix = `Offline rule sandbox from ${sourceRowSummary(activeRow)}`;
-  if (inferenceApiUrl) {
-    modeText = "rule fallback";
-    if (liveInference.pending) {
-      detailText = `Waiting for live sklearn API; showing browser rule fallback. Source datapoint: ${sourceRowSummary(activeRow)}.`;
-      bannerPrefix = `Rule fallback while live inference is pending from ${sourceRowSummary(activeRow)}`;
-    } else if (liveInference.error) {
-      detailText = `Live API unavailable; showing browser rule fallback. ${liveInference.error}`;
-      bannerPrefix = `Rule fallback after API error from ${sourceRowSummary(activeRow)}`;
-    } else {
-      detailText = `Live API configured; showing browser rule fallback until the response returns. Source datapoint: ${sourceRowSummary(activeRow)}.`;
-      bannerPrefix = `Rule fallback from ${sourceRowSummary(activeRow)}`;
-    }
+  if (inferenceApiUrl && !liveInference.error) {
+    const pendingResult = liveInference.result || replay;
+    return {
+      result: pendingResult,
+      features: deriveFeatureState(activeFeatures),
+      modeText: "live model pending",
+      detailText: `Waiting for live sklearn API. Source datapoint: ${sourceRowSummary(activeRow)}.`,
+      bannerPrefix: `Live sklearn inference pending from ${sourceRowSummary(activeRow)}`,
+    };
   }
+
+  const fallback = scoreFeatures(activeFeatures);
+  const apiUnavailable = inferenceApiUrl && liveInference.error;
   return {
     result: fallback,
     features: fallback.features,
-    modeText,
-    detailText,
-    bannerPrefix,
+    modeText: apiUnavailable ? "rule fallback" : "offline rule sandbox",
+    detailText: apiUnavailable
+      ? `Live API unavailable; showing browser rule fallback. ${liveInference.error}`
+      : `No inference API URL configured; manual edits use browser rules. Source datapoint: ${sourceRowSummary(activeRow)}.`,
+    bannerPrefix: apiUnavailable
+      ? `Rule fallback after API error from ${sourceRowSummary(activeRow)}`
+      : `Offline rule sandbox from ${sourceRowSummary(activeRow)}`,
   };
 }
 
@@ -806,7 +829,6 @@ function scheduleLiveInference() {
   if (liveInference.controller) {
     liveInference.controller.abort();
   }
-  liveInference.result = null;
   liveInference.error = "";
   liveInference.revision = editRevision;
 
