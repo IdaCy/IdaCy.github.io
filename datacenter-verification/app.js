@@ -280,9 +280,7 @@ function renderRowOptions(options = {}) {
     setControlsDisabled(true);
     dom.resetRow.disabled = true;
     activeRow = null;
-    activeFeatures = emptyFeatureState();
     sandboxDirty = false;
-    syncControls();
     renderEmptyState();
     return;
   }
@@ -555,40 +553,43 @@ function updateHud(features) {
   dom.hudCoverage.textContent = formatPercent(asNumber(features.o14_min_critical_coverage, 1), 0);
 }
 
+function updateHudEmpty() {
+  dom.hudGpus.textContent = "n/a";
+  dom.hudFabric.textContent = "n/a";
+  dom.hudPower.textContent = "n/a";
+  dom.hudCoverage.textContent = "n/a";
+}
+
 function renderEmptyState() {
   const features = emptyFeatureState();
-  const result = {
-    label: 0,
-    pLarge: 0,
-    severity: 0,
-    negativeCertificationConfidence: 0,
-    capacityPossible: false,
-    integrityWarning: false,
-    probabilities: [0, 0, 0, 0, 0],
-    criticalMissingLayers: [],
-    topEvidence: [],
-  };
   dom.stateBanner.textContent = "";
   dom.stateBanner.className = "state-banner";
   dom.resultMode.textContent = "No matching datapoint";
-  dom.modeDetail.textContent = "Adjust the filters to select a synthetic window.";
-  dom.resultLabel.textContent = "No datapoint for these filters";
+  dom.modeDetail.textContent = `No synthetic row exists for ${filterSummary()}. Evidence inputs are disabled and are not being scored.`;
+  dom.resultLabel.textContent = "No matching datapoint";
   dom.resultLabel.style.color = "var(--muted)";
   dom.riskFill.style.width = "0%";
   dom.riskFill.style.backgroundColor = "var(--muted)";
-  dom.pLarge.textContent = "0%";
-  dom.severityScore.textContent = "0.00";
-  dom.negativeConfidence.textContent = "0%";
-  dom.integrityStatus.textContent = "Clear";
-  dom.integrityStatus.style.color = "var(--ok)";
-  dom.capacityStatus.textContent = "Unknown";
+  dom.pLarge.textContent = "n/a";
+  dom.severityScore.textContent = "n/a";
+  dom.negativeConfidence.textContent = "n/a";
+  dom.integrityStatus.textContent = "n/a";
+  dom.integrityStatus.style.color = "var(--muted)";
+  dom.capacityStatus.textContent = "n/a";
   dom.capacityStatus.style.color = "var(--muted)";
-  dom.policyRatio.textContent = "Policy ratio 0.00";
-  renderProbabilityBars(result.probabilities);
+  dom.policyRatio.textContent = "Policy ratio n/a";
+  dom.probabilityBars.innerHTML = "";
+  const emptyProbabilities = document.createElement("p");
+  emptyProbabilities.className = "empty-panel-text";
+  emptyProbabilities.textContent = "No label probabilities without a matching datapoint.";
+  dom.probabilityBars.append(emptyProbabilities);
   renderList(dom.evidenceList, ["no datapoint selected"], false);
-  renderList(dom.missingList, ["none flagged"], true);
-  updateHud(features);
-  scene.update(features, result);
+  renderList(dom.missingList, ["no datapoint selected"], true);
+  updateHudEmpty();
+  scene.update(features, {
+    label: 0,
+    integrityWarning: false,
+  });
 }
 
 function renderStateBanner(result) {

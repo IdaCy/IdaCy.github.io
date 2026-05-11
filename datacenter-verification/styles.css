@@ -380,6 +380,12 @@ label {
   gap: 9px;
 }
 
+.empty-panel-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .prob-row {
   display: grid;
   grid-template-columns: 130px minmax(120px, 1fr) 52px;
