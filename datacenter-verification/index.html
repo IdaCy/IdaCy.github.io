@@ -34,19 +34,19 @@
         <div id="scene-root"></div>
         <div class="scene-hud">
           <div>
-            <span class="hud-label">Active GPUs</span>
+            <span class="hud-label" title="Maximum concurrent H100e-equivalent GPUs allocated in the selected window.">Active GPUs</span>
             <strong id="hud-gpus">0</strong>
           </div>
           <div>
-            <span class="hud-label">Fabric Signal</span>
+            <span class="hud-label" title="Maximum of collective periodicity and synchronized fabric footprint divided by capacity.">Fabric Signal</span>
             <strong id="hud-fabric">0%</strong>
           </div>
           <div>
-            <span class="hud-label">Rack Power</span>
+            <span class="hud-label" title="P95 rack/facility power fraction for the selected window.">Rack Power</span>
             <strong id="hud-power">0%</strong>
           </div>
           <div>
-            <span class="hud-label">Coverage</span>
+            <span class="hud-label" title="Minimum critical monitoring coverage. Low coverage weakens no-run claims.">Coverage</span>
             <strong id="hud-coverage">0%</strong>
           </div>
         </div>
@@ -63,36 +63,38 @@
 
       <section class="control-panel" aria-label="Data controls and verification result">
         <section class="selectors">
-          <label>
+          <label title="Filters synthetic rows by monitored site. Site metadata affects capacity and trust context.">
             Site
             <select id="site-select"></select>
           </label>
-          <label>
-            Scenario
+          <label title="Filters synthetic rows by the generator's latent workload class. It does not force the evidence inputs to become that workload after manual edits.">
+            Synthetic workload
             <select id="scenario-select"></select>
           </label>
-          <label>
-            Window
+          <label title="Feature aggregation duration for the synthetic row, not necessarily the full run duration.">
+            Aggregation window
             <select id="window-select"></select>
           </label>
-          <label>
+          <label title="Specific synthetic feature row matching the current filters. Row labels show model output, with truth labels only when they differ.">
             Datapoint
             <select id="row-select"></select>
           </label>
+          <p id="context-status" class="context-status"></p>
           <p id="filter-status" class="filter-status" aria-live="polite"></p>
         </section>
 
         <section class="quick-picks" aria-label="Label example buttons">
-          <button type="button" data-example-label="0">Label 0</button>
-          <button type="button" data-example-label="1">Label 1</button>
-          <button type="button" data-example-label="2">Label 2</button>
-          <button type="button" data-example-label="3">Label 3</button>
-          <button type="button" data-example-label="4">Label 4</button>
-          <button type="button" id="reset-row">Reset Row</button>
+          <button type="button" data-example-label="0" title="Load the curated L0 example row.">Example L0</button>
+          <button type="button" data-example-label="1" title="Load the curated L1 example row.">Example L1</button>
+          <button type="button" data-example-label="2" title="Load the curated L2 example row.">Example L2</button>
+          <button type="button" data-example-label="3" title="Load the curated L3 example row.">Example L3</button>
+          <button type="button" data-example-label="4" title="Load the curated L4 example row.">Example L4</button>
+          <button type="button" id="reset-row" title="Restore evidence inputs from the selected datapoint and return to calibrated model replay.">Reset Edits</button>
         </section>
 
         <section class="judgement">
           <div class="judgement-main">
+            <p id="state-banner" class="state-banner"></p>
             <p id="result-mode" class="eyebrow">Calibrated model replay</p>
             <p id="mode-detail" class="mode-detail">Selected datapoint replays the trained model export.</p>
             <h2 id="result-label">Loading</h2>
@@ -100,25 +102,25 @@
               <div id="risk-fill"></div>
             </div>
             <div class="risk-row">
-              <span>Large training probability</span>
+              <span title="Replay mode uses model probability. Sandbox mode uses the browser rule template.">Large training probability</span>
               <strong id="p-large">0%</strong>
             </div>
           </div>
           <div class="metric-grid">
-            <div>
+            <div title="Expected label severity on the 0-4 label scale.">
               <span>Severity</span>
               <strong id="severity-score">0.00</strong>
             </div>
-            <div>
+            <div title="Coverage-weighted confidence that no policy-scale large training run occurred. This is not 1 minus large-training probability.">
               <span>No-run confidence</span>
               <strong id="negative-confidence">0%</strong>
             </div>
-            <div>
+            <div title="Warns when critical telemetry coverage, counter availability, clock/counter integrity, or edited feature consistency is suspect.">
               <span>Integrity</span>
               <strong id="integrity-status">Clear</strong>
             </div>
-            <div>
-              <span>Capacity</span>
+            <div title="Whether the monitored capacity and largest contiguous domain can support the illustrative policy-scale threshold.">
+              <span>Policy capacity</span>
               <strong id="capacity-status">Unknown</strong>
             </div>
           </div>
@@ -131,7 +133,7 @@
         <section class="control-surface">
           <div class="section-heading">
             <h2>Evidence Inputs</h2>
-            <span id="policy-ratio">Policy ratio 0.00</span>
+            <span id="policy-ratio" title="Allocated GPUs times allocation hours divided by 512 GPUs times 24 hours.">Policy ratio 0.00</span>
           </div>
           <div id="controls-root"></div>
         </section>

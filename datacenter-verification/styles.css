@@ -234,6 +234,21 @@ input:disabled {
   font-weight: 600;
 }
 
+.context-status {
+  grid-column: 1 / -1;
+  margin: 0;
+  border-left: 4px solid var(--fabric);
+  background: #f3f7f6;
+  color: #34413b;
+  padding: 8px 10px;
+  font-size: 0.84rem;
+  line-height: 1.25;
+}
+
+.context-status:empty {
+  display: none;
+}
+
 label {
   display: grid;
   gap: 5px;
@@ -278,6 +293,26 @@ label {
   color: var(--muted);
   font-size: 0.86rem;
   line-height: 1.25;
+}
+
+.state-banner {
+  min-height: 30px;
+  margin: 0 0 10px;
+  border-left: 4px solid var(--line);
+  background: #f8f9f6;
+  color: #34413b;
+  padding: 8px 10px;
+  font-size: 0.86rem;
+  line-height: 1.25;
+}
+
+.state-banner.warning {
+  border-left-color: var(--integrity);
+  background: #fff6f4;
+}
+
+.state-banner:empty {
+  display: none;
 }
 
 .risk-meter {

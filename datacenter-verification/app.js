@@ -25,7 +25,8 @@ const WINDOW_LABELS = new Map([
 const controlDefs = [
   {
     key: "o1_normalized_h100e_capacity",
-    label: "H100e capacity",
+    label: "H100e-equiv capacity",
+    help: "Hardware-normalized accelerator capacity. This is a capacity gate, not evidence that a run is active.",
     type: "range",
     min: 0,
     max: 4096,
@@ -35,6 +36,7 @@ const controlDefs = [
   {
     key: "o2_max_concurrent_normalized_gpus",
     label: "Allocated GPUs",
+    help: "Maximum concurrent H100e-equivalent GPUs allocated in the selected window.",
     type: "range",
     min: 0,
     max: 2600,
@@ -44,6 +46,7 @@ const controlDefs = [
   {
     key: "o2_allocation_duration_hours",
     label: "Allocation duration",
+    help: "Allocation or linked-job duration in hours. It is interpreted together with allocated GPUs.",
     type: "range",
     min: 0,
     max: 420,
@@ -53,6 +56,7 @@ const controlDefs = [
   {
     key: "o4_gpu_util_p95",
     label: "GPU utilization p95",
+    help: "P95 GPU busy/utilization percent. High utilization is activity evidence, not training semantics by itself.",
     type: "range",
     min: 0,
     max: 100,
@@ -62,6 +66,7 @@ const controlDefs = [
   {
     key: "o4_sm_tensor_active_p95",
     label: "Tensor activity p95",
+    help: "P95 tensor-core or tensor-pipe activity. High values support training-like compute activity.",
     type: "range",
     min: 0,
     max: 100,
@@ -71,6 +76,7 @@ const controlDefs = [
   {
     key: "o7_synchronized_fabric_footprint",
     label: "Fabric footprint",
+    help: "Approximate size of synchronized scale-out fabric behavior. Large values support one coordinated distributed job.",
     type: "range",
     min: 0,
     max: 2400,
@@ -80,6 +86,7 @@ const controlDefs = [
   {
     key: "o7_collective_periodicity_score",
     label: "Collective periodicity",
+    help: "0-1 score for periodic collective communication such as all-reduce bursts.",
     type: "range",
     min: 0,
     max: 1,
@@ -89,6 +96,7 @@ const controlDefs = [
   {
     key: "o8_rack_power_fraction_p95",
     label: "Rack power p95",
+    help: "P95 rack or facility power fraction. Power corroborates activity but does not identify workload semantics alone.",
     type: "range",
     min: 0,
     max: 1,
@@ -98,6 +106,7 @@ const controlDefs = [
   {
     key: "o11_checkpoint_periodicity_score",
     label: "Checkpoint cadence",
+    help: "0-1 score for periodic checkpoint or training-storage cadence.",
     type: "range",
     min: 0,
     max: 1,
@@ -107,6 +116,7 @@ const controlDefs = [
   {
     key: "o14_min_critical_coverage",
     label: "Critical coverage",
+    help: "Minimum coverage across critical monitoring layers. Low coverage weakens no-run claims.",
     type: "range",
     min: 0,
     max: 1,
@@ -116,6 +126,7 @@ const controlDefs = [
   {
     key: "o14_gap_fraction_critical",
     label: "Telemetry gap fraction",
+    help: "Fraction of critical telemetry missing in the window. Gaps are integrity evidence, not no-activity evidence.",
     type: "range",
     min: 0,
     max: 1,
@@ -125,6 +136,7 @@ const controlDefs = [
   {
     key: "o13_confidential_compute_mode_fraction",
     label: "Confidential-compute share",
+    help: "Share of monitored devices/time in confidential-compute mode, which can legitimately suppress counters.",
     type: "range",
     min: 0,
     max: 1,
@@ -134,24 +146,28 @@ const controlDefs = [
   {
     key: "o12_signed_ml_logs_present",
     label: "Signed ML logs",
+    help: "Authenticated ML-layer logs or declarations. This is high-value semantic evidence when present.",
     type: "checkbox",
     format: (value) => (asBool(value) ? "present" : "absent"),
   },
   {
     key: "o10_runtime_framework_class",
     label: "Runtime class",
+    help: "Host/container runtime class. Training runtimes are semantic evidence; inference/HPC/benchmark runtimes are false-positive context.",
     type: "select",
     optionsKey: "o10_runtime_framework_class",
   },
   {
     key: "o2_declared_workload_class",
     label: "Declared class",
+    help: "Self-declared scheduler/allocation workload class. Unsigned declarations are weak evidence and need corroboration.",
     type: "select",
     optionsKey: "o2_declared_workload_class",
   },
   {
     key: "o4_missing_reason",
-    label: "GPU telemetry state",
+    label: "GPU telemetry availability",
+    help: "Whether GPU telemetry was observed, gapped, or suppressed by confidential-compute mode.",
     type: "select",
     optionsKey: "o4_missing_reason",
   },
@@ -194,8 +210,10 @@ function bindDom() {
     "scenario-select",
     "window-select",
     "row-select",
+    "context-status",
     "filter-status",
     "reset-row",
+    "state-banner",
     "result-mode",
     "mode-detail",
     "result-label",
@@ -221,18 +239,22 @@ function toCamel(id) {
 }
 
 function populateSelectors() {
-  const sites = dataset.sites.map((site) => site.site_id);
-  setOptions(dom.siteSelect, [["all", "All sites"], ...sites.map((site) => [site, site])]);
+  setOptions(
+    dom.siteSelect,
+    [["all", "All sites"], ...dataset.sites.map((site) => [site.site_id, siteOptionLabel(site)])]
+  );
 
-  const scenarios = dataset.scenarios.map((item) => item.scenario);
-  setOptions(dom.scenarioSelect, [["all", "All scenarios"], ...scenarios.map((scenario) => [scenario, pretty(scenario)])]);
+  setOptions(
+    dom.scenarioSelect,
+    [["all", "All synthetic workloads"], ...dataset.scenarios.map((item) => [item.scenario, scenarioOptionLabel(item)])]
+  );
 
   const windows = [...new Set(dataset.rows.map((row) => row.window_length_seconds))].sort((a, b) => a - b);
   setOptions(dom.windowSelect, [["all", "All windows"], ...windows.map((window) => [String(window), WINDOW_LABELS.get(window) || `${window}s`])]);
 
-  dom.siteSelect.addEventListener("change", () => renderRowOptions());
-  dom.scenarioSelect.addEventListener("change", () => renderRowOptions());
-  dom.windowSelect.addEventListener("change", () => renderRowOptions());
+  dom.siteSelect.addEventListener("change", () => renderRowOptions({ resetExisting: true }));
+  dom.scenarioSelect.addEventListener("change", () => renderRowOptions({ resetExisting: true }));
+  dom.windowSelect.addEventListener("change", () => renderRowOptions({ resetExisting: true }));
   dom.rowSelect.addEventListener("change", () => {
     if (dom.rowSelect.value) setActiveRowById(dom.rowSelect.value);
   });
@@ -248,8 +270,9 @@ function populateQuickPicks() {
   dom.resetRow.addEventListener("click", () => setActiveRow(activeRow, { resetFeatures: true }));
 }
 
-function renderRowOptions() {
+function renderRowOptions(options = {}) {
   const rows = filteredRows();
+  renderContextStatus(rows);
   updateFilterStatus(rows.length, Math.min(rows.length, 700));
   if (!rows.length) {
     setOptions(dom.rowSelect, [["", "No matching datapoints"]]);
@@ -271,11 +294,13 @@ function renderRowOptions() {
     dom.rowSelect,
     limitedRows.map((row) => [
       row.feature_row_id,
-      `${row.site_id} | ${pretty(row.latent_workload_class)} | L${row.label_0_to_4} | ${WINDOW_LABELS.get(row.window_length_seconds)}`,
+      rowOptionLabel(row),
     ])
   );
   if (!limitedRows.some((row) => row.feature_row_id === activeRow?.feature_row_id)) {
     setActiveRow(limitedRows[0] || dataset.rows[0], { resetFeatures: true });
+  } else if (options.resetExisting) {
+    setActiveRow(activeRow, { resetFeatures: true });
   } else {
     dom.rowSelect.value = activeRow.feature_row_id;
   }
@@ -326,8 +351,10 @@ function buildControls() {
     const row = document.createElement("label");
     row.className = "control-row";
     row.dataset.controlKey = def.key;
+    if (def.help) row.title = def.help;
     const name = document.createElement("span");
     name.textContent = def.label;
+    if (def.help) name.title = def.help;
     const value = document.createElement("strong");
     value.className = "control-value";
     value.dataset.valueFor = def.key;
@@ -347,6 +374,7 @@ function buildControls() {
       }
     }
     input.dataset.key = def.key;
+    if (def.help) input.title = def.help;
     input.addEventListener("input", () => {
       applyControlValue(def, input);
       sandboxDirty = true;
@@ -406,24 +434,52 @@ function updateControlValue(def) {
 function updateCoverageFields(changedKey) {
   if (changedKey === "o14_min_critical_coverage") {
     const coverage = asNumber(activeFeatures.o14_min_critical_coverage, 1);
-    activeFeatures.o1_coverage_fraction = Math.min(asNumber(activeFeatures.o1_coverage_fraction, 1), coverage);
-    activeFeatures.o2_coverage_fraction = Math.min(asNumber(activeFeatures.o2_coverage_fraction, 1), coverage);
-    activeFeatures.o4_coverage_fraction = Math.min(asNumber(activeFeatures.o4_coverage_fraction, 1), coverage);
-    activeFeatures.o7_coverage_fraction = Math.min(asNumber(activeFeatures.o7_coverage_fraction, 1), coverage);
-    activeFeatures.o8_coverage_fraction = Math.min(asNumber(activeFeatures.o8_coverage_fraction, 1), coverage);
-    activeFeatures.o14_coverage_fraction = coverage;
+    setCriticalCoverageFields(coverage);
   }
   if (changedKey === "o4_missing_reason") {
-    activeFeatures.o4_coverage_fraction = activeFeatures.o4_missing_reason === "observed" ? 1 : 0.2;
-    if (activeFeatures.o4_missing_reason === "counter_disabled_by_cc_mode") {
+    const reason = activeFeatures.o4_missing_reason;
+    activeFeatures.o4_coverage_fraction = reason === "observed"
+      ? asNumber(activeFeatures.o14_min_critical_coverage, 1)
+      : 0.2;
+    if (reason === "observed") {
+      if (
+        asNumber(activeFeatures.o13_confidential_compute_mode_fraction) >= 0.75 &&
+        asNumber(activeFeatures.o14_gap_fraction_critical) >= 0.45 &&
+        asNumber(activeFeatures.o14_min_critical_coverage, 1) <= 0.35
+      ) {
+        activeFeatures.o13_confidential_compute_mode_fraction = 0;
+        activeFeatures.o14_gap_fraction_critical = 0.01;
+        activeFeatures.o14_min_critical_coverage = 0.98;
+        setCriticalCoverageFields(0.98);
+      }
+    }
+    if (reason === "collector_gap") {
+      activeFeatures.o14_gap_fraction_critical = Math.max(asNumber(activeFeatures.o14_gap_fraction_critical), 0.12);
+      activeFeatures.o14_min_critical_coverage = Math.min(asNumber(activeFeatures.o14_min_critical_coverage, 1), 0.8);
+      setCriticalCoverageFields(asNumber(activeFeatures.o14_min_critical_coverage, 1));
+      activeFeatures.o4_coverage_fraction = 0.2;
+    }
+    if (reason === "counter_disabled_by_cc_mode") {
       activeFeatures.o13_confidential_compute_mode_fraction = Math.max(
         asNumber(activeFeatures.o13_confidential_compute_mode_fraction),
         0.75
       );
       activeFeatures.o14_gap_fraction_critical = Math.max(asNumber(activeFeatures.o14_gap_fraction_critical), 0.45);
       activeFeatures.o14_min_critical_coverage = Math.min(asNumber(activeFeatures.o14_min_critical_coverage, 1), 0.35);
+      setCriticalCoverageFields(asNumber(activeFeatures.o14_min_critical_coverage, 1));
+      activeFeatures.o4_coverage_fraction = 0.2;
     }
   }
+}
+
+function setCriticalCoverageFields(coverageValue) {
+  const coverage = clamp(coverageValue);
+  activeFeatures.o1_coverage_fraction = coverage;
+  activeFeatures.o2_coverage_fraction = coverage;
+  activeFeatures.o4_coverage_fraction = activeFeatures.o4_missing_reason === "observed" ? coverage : Math.min(coverage, 0.2);
+  activeFeatures.o7_coverage_fraction = coverage;
+  activeFeatures.o8_coverage_fraction = coverage;
+  activeFeatures.o14_coverage_fraction = coverage;
 }
 
 function renderDashboard() {
@@ -435,10 +491,12 @@ function renderDashboard() {
   const result = sandboxDirty ? scoreFeatures(activeFeatures) : replay;
   const features = sandboxDirty ? result.features : replay.features;
 
-  dom.resultMode.textContent = sandboxDirty ? "Rule sandbox" : "Calibrated model replay";
+  renderStateBanner(result);
+  dom.resetRow.disabled = false;
+  dom.resultMode.textContent = sandboxDirty ? "Edited rule sandbox" : "Calibrated model replay";
   dom.modeDetail.textContent = sandboxDirty
-    ? "Manual edits use the browser rule sandbox; selected datapoints replay the trained model export."
-    : "Selected datapoint replays the trained model export.";
+    ? `Manual edits use browser rules. Source datapoint: ${sourceRowSummary(activeRow)}.`
+    : `Selected datapoint replays the trained model export. ${sourceRowSummary(activeRow)}.`;
   dom.resultLabel.textContent = `L${result.label}: ${labelName(result.label)}`;
   dom.resultLabel.style.color = labelColor(result.label);
   dom.riskFill.style.width = formatPercent(result.pLarge, 1);
@@ -510,6 +568,8 @@ function renderEmptyState() {
     criticalMissingLayers: [],
     topEvidence: [],
   };
+  dom.stateBanner.textContent = "";
+  dom.stateBanner.className = "state-banner";
   dom.resultMode.textContent = "No matching datapoint";
   dom.modeDetail.textContent = "Adjust the filters to select a synthetic window.";
   dom.resultLabel.textContent = "No datapoint for these filters";
@@ -531,10 +591,54 @@ function renderEmptyState() {
   scene.update(features, result);
 }
 
+function renderStateBanner(result) {
+  if (!activeRow) {
+    dom.stateBanner.textContent = "";
+    dom.stateBanner.className = "state-banner";
+    return;
+  }
+  const warnings = result.consistencyWarnings || [];
+  dom.stateBanner.className = warnings.length ? "state-banner warning" : "state-banner";
+  if (sandboxDirty) {
+    const parts = [`Edited sandbox from ${sourceRowSummary(activeRow)}`];
+    if (warnings.length) {
+      parts.push(`Inconsistent inputs: ${warnings.join("; ")}`);
+    }
+    dom.stateBanner.textContent = parts.join(". ");
+  } else {
+    dom.stateBanner.textContent = `Source datapoint: ${sourceRowSummary(activeRow)}`;
+  }
+}
+
+function renderContextStatus(rows = filteredRows()) {
+  if (!dom.contextStatus || !dataset) return;
+  const site = dom.siteSelect.value;
+  const scenario = dom.scenarioSelect.value;
+  const parts = [];
+  if (site !== "all") {
+    const siteMeta = dataset.sites.find((item) => item.site_id === site);
+    if (siteMeta) {
+      parts.push(
+        `${site}: ${pretty(siteMeta.site_type)}, ${formatNumber(siteMeta.normalized_h100e_capacity)} H100e, largest domain ${formatNumber(siteMeta.largest_contiguous_domain_gpus)}`
+      );
+    }
+  }
+  if (scenario !== "all") {
+    const scenarioMeta = dataset.scenarios.find((item) => item.scenario === scenario);
+    if (scenarioMeta) {
+      parts.push(`${pretty(scenario)}: ${labelDistributionText(scenarioMeta.label_distribution)}`);
+    }
+  }
+  if (!parts.length) {
+    parts.push("Filters select existing synthetic datapoints; evidence edits switch to the rule sandbox.");
+  }
+  dom.contextStatus.textContent = `${parts.join(" | ")} | ${formatNumber(rows.length)} matching rows`;
+}
+
 function updateFilterStatus(totalRows, shownRows) {
   if (!dom.filterStatus) return;
   if (totalRows === 0) {
-    dom.filterStatus.textContent = "No datapoints match these filters.";
+    dom.filterStatus.textContent = `No datapoints match ${filterSummary()}. The synthetic workload filter does not create new datapoints.`;
   } else if (totalRows > shownRows) {
     dom.filterStatus.textContent = `Showing first ${formatNumber(shownRows)} of ${formatNumber(totalRows)} matching datapoints.`;
   } else {
@@ -649,6 +753,45 @@ function emptyFeatureState() {
     o14_gap_fraction_critical: 0,
     capacity_possible: false,
   });
+}
+
+function siteOptionLabel(site) {
+  return `${site.site_id} - ${pretty(site.site_type)}, ${formatNumber(site.normalized_h100e_capacity)} H100e`;
+}
+
+function scenarioOptionLabel(item) {
+  return `${pretty(item.scenario)} (${formatNumber(item.rows)} rows; ${labelDistributionText(item.label_distribution)})`;
+}
+
+function rowOptionLabel(row) {
+  const predicted = Number(row.predicted_label);
+  const truth = Number(row.label_0_to_4);
+  const label = predicted === truth ? `model L${predicted}` : `truth L${truth}, model L${predicted}`;
+  return `${row.site_id} | ${pretty(row.latent_workload_class)} | ${label} | ${WINDOW_LABELS.get(row.window_length_seconds)}`;
+}
+
+function sourceRowSummary(row) {
+  if (!row) return "none";
+  const predicted = Number(row.predicted_label);
+  const truth = Number(row.label_0_to_4);
+  const label = predicted === truth ? `model L${predicted}` : `truth L${truth}, model L${predicted}`;
+  return `${row.site_id} / ${pretty(row.latent_workload_class)} / ${WINDOW_LABELS.get(row.window_length_seconds)} / ${label}`;
+}
+
+function labelDistributionText(distribution = {}) {
+  return Object.entries(distribution)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([label, count]) => `L${label} ${formatNumber(count)}`)
+    .join(", ");
+}
+
+function filterSummary() {
+  const site = dom.siteSelect.value === "all" ? "all sites" : dom.siteSelect.value;
+  const scenario = dom.scenarioSelect.value === "all" ? "all synthetic workloads" : pretty(dom.scenarioSelect.value);
+  const windowLength = dom.windowSelect.value === "all"
+    ? "all windows"
+    : WINDOW_LABELS.get(Number(dom.windowSelect.value)) || `${dom.windowSelect.value}s`;
+  return `${site}, ${scenario}, ${windowLength}`;
 }
 
 function setOptions(select, options) {

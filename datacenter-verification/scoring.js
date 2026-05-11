@@ -84,6 +84,26 @@ function deriveFeatureState(features) {
   return out;
 }
 
+function consistencyWarnings(inputFeatures) {
+  const row = deriveFeatureState(inputFeatures);
+  const capacity = asNumber(row.o1_normalized_h100e_capacity);
+  const allocation = asNumber(row.o2_max_concurrent_normalized_gpus);
+  const fabricFootprint = asNumber(row.o7_synchronized_fabric_footprint);
+  const warnings = [];
+
+  if (capacity > 0 && allocation > capacity + 1) {
+    warnings.push("allocated GPUs exceed monitored H100e capacity");
+  }
+  if (capacity > 0 && fabricFootprint > capacity + 1) {
+    warnings.push("fabric footprint exceeds monitored H100e capacity");
+  }
+  if (allocation > 0 && fabricFootprint > allocation + 1) {
+    warnings.push("fabric footprint exceeds allocated GPUs");
+  }
+
+  return warnings;
+}
+
 function evidenceFlags(inputFeatures) {
   const row = deriveFeatureState(inputFeatures);
   const capacity = asBool(row.capacity_possible);
@@ -110,9 +130,26 @@ function evidenceFlags(inputFeatures) {
   const gapFraction = asNumber(row.o14_gap_fraction_critical);
   const ccFraction = asNumber(row.o13_confidential_compute_mode_fraction);
   const counterResets = asNumber(row.o14_counter_reset_count);
+  const criticalCoverages = [
+    asNumber(row.o1_coverage_fraction, 1),
+    asNumber(row.o2_coverage_fraction, 1),
+    asNumber(row.o4_coverage_fraction, 1),
+    asNumber(row.o7_coverage_fraction, 1),
+    asNumber(row.o8_coverage_fraction, 1),
+    asNumber(row.o14_coverage_fraction, minCoverage),
+  ];
+  const criticalReasons = [
+    row.o1_missing_reason,
+    row.o2_missing_reason,
+    row.o4_missing_reason,
+    row.o7_missing_reason,
+    row.o8_missing_reason,
+    row.o14_missing_reason,
+  ].map((value) => String(value || "observed"));
   const runtime = String(row.o10_runtime_framework_class || "").toLowerCase();
   const declaredClass = String(row.o2_declared_workload_class || "").toLowerCase();
   const o4Missing = String(row.o4_missing_reason || "");
+  const hasConsistencyWarnings = consistencyWarnings(row).length > 0;
 
   const allocation =
     allocationGpus >= 512 ||
@@ -131,10 +168,13 @@ function evidenceFlags(inputFeatures) {
   const integrity =
     gapFraction > 0.05 ||
     minCoverage < 0.8 ||
+    criticalCoverages.some((coverage) => coverage < 0.8) ||
+    criticalReasons.some((reason) => !["observed", ""].includes(reason)) ||
     ccFraction > 0.5 ||
     counterResets > 0 ||
     asBool(row.o15_unapproved_physical_change_near_window) ||
-    o4Missing === "counter_disabled_by_cc_mode";
+    o4Missing === "counter_disabled_by_cc_mode" ||
+    hasConsistencyWarnings;
   const falsePositivePattern =
     FALSE_POSITIVE_RUNTIME_MARKERS.some((marker) => runtime.includes(marker)) ||
     FALSE_POSITIVE_DECLARED_CLASSES.has(declaredClass);
@@ -215,7 +255,7 @@ function probabilitiesForLabel(label) {
 
 function topEvidenceForFeatures(features) {
   const row = deriveFeatureState(features);
-  const evidence = [];
+  const evidence = consistencyWarnings(row).map((warning) => `inconsistent edit: ${warning}`);
   const capacity = asBool(row.capacity_possible);
   const externalConflict = asNumber(row.o17_external_capacity_conflict_score);
   const allocationGpus = asNumber(row.o2_max_concurrent_normalized_gpus);
@@ -233,6 +273,7 @@ function topEvidenceForFeatures(features) {
   const minCoverage = asNumber(row.o14_min_critical_coverage, 1);
   const gapFraction = asNumber(row.o14_gap_fraction_critical);
   const ccFraction = asNumber(row.o13_confidential_compute_mode_fraction);
+  const o4Missing = String(row.o4_missing_reason || "");
   const runtime = String(row.o10_runtime_framework_class || "");
   const declaredClass = String(row.o2_declared_workload_class || "").toLowerCase();
   const reservedWithoutActivity =
@@ -247,6 +288,10 @@ function topEvidenceForFeatures(features) {
     checkpoint < 0.2 &&
     !signedLogs;
 
+  if (o4Missing === "collector_gap") evidence.push("GPU telemetry collector gap");
+  if (ccFraction > 0.5 || o4Missing === "counter_disabled_by_cc_mode") {
+    evidence.push("counter disabled by confidential-compute mode");
+  }
   if (!capacity && externalConflict < 0.5) evidence.push("capacity below policy threshold");
   if (externalConflict >= 0.5) evidence.push("external capacity conflict");
   if (allocationGpus >= 512 || gpuHoursRatio >= 1) evidence.push("large allocation");
@@ -260,9 +305,6 @@ function topEvidenceForFeatures(features) {
   if (checkpoint >= 0.55) evidence.push("checkpoint cadence");
   if (signedLogs) evidence.push("signed ML logs");
   if (minCoverage < 0.8 || gapFraction > 0.05) evidence.push("low critical coverage");
-  if (ccFraction > 0.5 || row.o4_missing_reason === "counter_disabled_by_cc_mode") {
-    evidence.push("counter disabled by confidential-compute mode");
-  }
   return evidence.length ? evidence.slice(0, 8) : ["no strong positive evidence"];
 }
 
@@ -319,6 +361,7 @@ function criticalMissingLayers(features) {
     ["O14", "o14_coverage_fraction", "o14_missing_reason"],
   ];
   const out = [];
+  const gapFraction = asNumber(row.o14_gap_fraction_critical);
   for (const [observable, coverageKey, reasonKey] of layers) {
     const coverage = asNumber(row[coverageKey], coverageKey === "o14_coverage_fraction" ? row.o14_min_critical_coverage : 1);
     const reason = String(row[reasonKey] || "observed");
@@ -329,12 +372,19 @@ function criticalMissingLayers(features) {
   if (!out.length && asNumber(row.o14_min_critical_coverage, 1) < 0.8) {
     out.push(`O14: critical coverage ${asNumber(row.o14_min_critical_coverage).toFixed(2)}`);
   }
+  if (gapFraction > 0.05 && !out.some((item) => item.startsWith("O14:"))) {
+    out.push(`O14: gap fraction ${gapFraction.toFixed(2)}`);
+  }
   return out;
 }
 
 function scoreFeatures(inputFeatures) {
   const features = deriveFeatureState(inputFeatures);
-  const label = predictRuleLabel(features);
+  const warnings = consistencyWarnings(features);
+  let label = predictRuleLabel(features);
+  if (warnings.length && label < 2) {
+    label = 2;
+  }
   const probabilities = probabilitiesForLabel(label);
   const pLarge = probabilities[3] + probabilities[4];
   const severity = probabilities.reduce((sum, probability, index) => sum + probability * index, 0);
@@ -350,9 +400,10 @@ function scoreFeatures(inputFeatures) {
     severity,
     negativeCertificationConfidence: negative,
     capacityPossible: asBool(features.capacity_possible),
-    integrityWarning: flags.integrity,
+    integrityWarning: flags.integrity || warnings.length > 0,
     criticalMissingLayers: criticalMissingLayers(features),
     topEvidence: topEvidenceForFeatures(features),
+    consistencyWarnings: warnings,
     features,
   };
 }
@@ -370,6 +421,7 @@ function replayResult(row) {
     integrityWarning: asBool(row.integrity_warning),
     criticalMissingLayers: splitSemicolon(row.critical_missing_layers),
     topEvidence: normalizeEvidenceForFeatures(splitSemicolon(row.top_evidence), row.features || {}),
+    consistencyWarnings: [],
     features: deriveFeatureState(row.features || {}),
   };
 }
@@ -386,6 +438,7 @@ window.DCVScoring = {
   asBool,
   asNumber,
   clamp,
+  consistencyWarnings,
   deriveFeatureState,
   formatNumber,
   formatPercent,
