@@ -207,8 +207,8 @@ input:disabled {
 .storage { background: var(--storage); }
 .integrity { background: var(--integrity); }
 .neutral {
-  background: #9aa39f;
-  border: 1px solid #5f6964;
+  background: #c8d0cc;
+  border: 1px solid #8f9a94;
 }
 
 .control-panel {
