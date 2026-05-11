@@ -639,8 +639,8 @@ function currentDisplayResult(replay) {
       result: liveInference.result,
       features: liveInference.result.features,
       modeText: "live model inference",
-      detailText: `Edited controls scored by the live sklearn API. Source datapoint: ${sourceRowSummary(activeRow)}.`,
-      bannerPrefix: `Live sklearn inference from ${sourceRowSummary(activeRow)}`,
+      detailText: `Edited controls scored by the live model. Source datapoint: ${sourceRowSummary(activeRow)}.`,
+      bannerPrefix: `Live score for ${sourceRowSummary(activeRow)}`,
     };
   }
 
@@ -650,8 +650,8 @@ function currentDisplayResult(replay) {
       result: pendingResult,
       features: deriveFeatureState(activeFeatures),
       modeText: "live model pending",
-      detailText: `Waiting for live sklearn API. Source datapoint: ${sourceRowSummary(activeRow)}.`,
-      bannerPrefix: `Live sklearn inference pending from ${sourceRowSummary(activeRow)}`,
+      detailText: `Waiting for the live model. Source datapoint: ${sourceRowSummary(activeRow)}.`,
+      bannerPrefix: `Updating live score for ${sourceRowSummary(activeRow)}`,
     };
   }
 
@@ -758,7 +758,7 @@ function renderStateBanner(result, display = {}) {
   if (sandboxDirty) {
     const parts = [display.bannerPrefix || `Edited sandbox from ${sourceRowSummary(activeRow)}`];
     if (warnings.length) {
-      parts.push(`Inconsistent inputs: ${warnings.join("; ")}`);
+      parts.push(`Please check: ${warnings.join("; ")}`);
     }
     dom.stateBanner.textContent = parts.join(". ");
   } else {
@@ -941,15 +941,38 @@ function displayFeaturesFromApi(completed) {
 }
 
 function userFacingApiWarnings(value) {
-  return asStringArray(value).filter((warning) => {
+  return asStringArray(value).flatMap((warning) => {
     const lower = warning.toLowerCase();
-    if (lower.startsWith("derived fields updated from edited inputs:")) return false;
-    if (lower.includes("metadata-only and was not sent to the model")) return false;
+    if (lower.startsWith("derived fields updated from edited inputs:")) return [];
+    if (lower.includes("metadata-only and was not sent to the model")) return [];
     for (const key of KNOWN_METADATA_ONLY_FEATURES) {
-      if (lower.includes("kept only as metadata") && lower.includes(key)) return false;
+      if (lower.includes("kept only as metadata") && lower.includes(key)) return [];
     }
-    return true;
+    return [plainWarningText(warning)];
   });
+}
+
+function plainWarningText(warning) {
+  const lower = warning.toLowerCase();
+  if (lower === "allocated gpus exceed monitored h100e capacity") {
+    return "The allocated GPU count is higher than this site's monitored GPU capacity. Lower allocated GPUs or choose a higher-capacity site.";
+  }
+  if (lower === "fabric footprint exceeds monitored h100e capacity") {
+    return "The network fabric size is higher than this site's monitored GPU capacity. Lower fabric footprint or choose a higher-capacity site.";
+  }
+  if (lower === "fabric footprint exceeds allocated gpus") {
+    return "The network fabric size is higher than the allocated GPU count. Lower fabric footprint or raise allocated GPUs.";
+  }
+  if (lower.startsWith("feature_row_id not found in base lookup:")) {
+    return "The selected datapoint was not found in the live API reference table. Live scoring may be less reliable because many model inputs may be missing.";
+  }
+  if (lower.includes("field is not a model feature and was kept only as metadata:")) {
+    return `The live API ignored an unrecognized input field: ${warning.split(":").pop().trim()}`;
+  }
+  if (lower.startsWith("no base row supplied;")) {
+    return "The live API is missing many model inputs. Choose a sampled datapoint before editing controls for a more reliable live score.";
+  }
+  return warning;
 }
 
 function asStringArray(value) {
