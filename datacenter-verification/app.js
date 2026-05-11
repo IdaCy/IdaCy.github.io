@@ -18,6 +18,11 @@ const DATA_URL = "./data/demo-data.json";
 const CONFIG_URL = "./config.js";
 const LIVE_INFERENCE_DEBOUNCE_MS = 250;
 const LIVE_INFERENCE_TIMEOUT_MS = 6000;
+const KNOWN_METADATA_ONLY_FEATURES = new Set([
+  "capacity_evidence_only",
+  "integrity_evidence_only",
+  "physical_evidence_only",
+]);
 const WINDOW_LABELS = new Map([
   [900, "15 min"],
   [3600, "1 hour"],
@@ -860,7 +865,7 @@ async function requestLiveInference(revision) {
 function liveInferencePayload() {
   return {
     feature_row_id: activeRow?.feature_row_id || null,
-    features: clone(activeFeatures),
+    features: liveInferenceFeatures(),
     context: {
       scope_type: activeRow?.scope_type || activeFeatures.scope_type || "topology_domain",
       window_length_seconds: activeRow?.window_length_seconds || activeFeatures.window_length_seconds || 3600,
@@ -868,6 +873,14 @@ function liveInferencePayload() {
     derive: true,
     return_completed_features: true,
   };
+}
+
+function liveInferenceFeatures() {
+  const features = clone(activeFeatures);
+  for (const key of KNOWN_METADATA_ONLY_FEATURES) {
+    delete features[key];
+  }
+  return features;
 }
 
 function resultFromApi(payload) {
@@ -890,9 +903,31 @@ function resultFromApi(payload) {
     integrityWarning: asBool(payload.integrity_warning),
     criticalMissingLayers: asStringArray(payload.critical_missing_layers),
     topEvidence: asStringArray(payload.top_evidence),
-    consistencyWarnings: asStringArray(payload.input_warnings),
-    features: deriveFeatureState({ ...activeFeatures, ...completed }),
+    consistencyWarnings: userFacingApiWarnings(payload.input_warnings),
+    features: displayFeaturesFromApi(completed),
   };
+}
+
+function displayFeaturesFromApi(completed) {
+  const features = { ...activeFeatures, ...completed };
+  for (const def of controlDefs) {
+    if (Object.prototype.hasOwnProperty.call(activeFeatures, def.key)) {
+      features[def.key] = activeFeatures[def.key];
+    }
+  }
+  return deriveFeatureState(features);
+}
+
+function userFacingApiWarnings(value) {
+  return asStringArray(value).filter((warning) => {
+    const lower = warning.toLowerCase();
+    if (lower.startsWith("derived fields updated from edited inputs:")) return false;
+    if (lower.includes("metadata-only and was not sent to the model")) return false;
+    for (const key of KNOWN_METADATA_ONLY_FEATURES) {
+      if (lower.includes("kept only as metadata") && lower.includes(key)) return false;
+    }
+    return true;
+  });
 }
 
 function asStringArray(value) {
