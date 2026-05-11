@@ -1029,7 +1029,7 @@ function siteOptionLabel(site) {
 }
 
 function scenarioOptionLabel(item) {
-  return `${pretty(scenarioSummaryKey(item))} (${formatNumber(item.rows)} rows; ${labelDistributionText(item.label_distribution)})`;
+  return pretty(scenarioSummaryKey(item));
 }
 
 function rowOptionLabel(row) {
