@@ -226,12 +226,30 @@ input:disabled {
   gap: 12px;
 }
 
-.filter-status {
+.filter-status,
+.api-status {
   grid-column: 1 / -1;
   margin: -2px 0 0;
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 600;
+}
+
+.api-status {
+  margin-top: -6px;
+}
+
+.api-available {
+  color: var(--ok);
+}
+
+.api-pending,
+.api-configured {
+  color: var(--warn);
+}
+
+.api-unavailable {
+  color: var(--integrity);
 }
 
 .context-status {

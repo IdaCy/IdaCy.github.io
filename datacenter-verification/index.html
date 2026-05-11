@@ -20,7 +20,7 @@
   <div class="app-shell">
     <header class="topbar">
       <div>
-        <p class="eyebrow">Synthetic v0</p>
+        <p id="dataset-eyebrow" class="eyebrow">Synthetic dataset</p>
         <h1>Datacenter Training-Run Verification</h1>
       </div>
       <div class="topbar-actions">
@@ -67,8 +67,8 @@
             Site
             <select id="site-select"></select>
           </label>
-          <label title="Filters synthetic rows by the generator's latent workload class. It does not force the evidence inputs to become that workload after manual edits.">
-            Synthetic workload
+          <label title="Filters synthetic rows by the generator's scenario family. It does not force the evidence inputs to become that workload after manual edits.">
+            Scenario family
             <select id="scenario-select"></select>
           </label>
           <label title="Feature aggregation duration for the synthetic row, not necessarily the full run duration.">
@@ -81,6 +81,7 @@
           </label>
           <p id="context-status" class="context-status"></p>
           <p id="filter-status" class="filter-status" aria-live="polite"></p>
+          <p id="api-status" class="api-status" aria-live="polite"></p>
         </section>
 
         <section class="quick-picks" aria-label="Label example buttons">
@@ -102,7 +103,7 @@
               <div id="risk-fill"></div>
             </div>
             <div class="risk-row">
-              <span title="Replay mode uses model probability. Sandbox mode uses the browser rule template.">Large training probability</span>
+              <span title="Replay mode uses exported model probability. Edited mode uses live model inference when configured, otherwise the browser rule fallback.">Large training probability</span>
               <strong id="p-large">0%</strong>
             </div>
           </div>

@@ -15,6 +15,9 @@ const {
 const { DatacenterScene } = window;
 
 const DATA_URL = "./data/demo-data.json";
+const CONFIG_URL = "./config.js";
+const LIVE_INFERENCE_DEBOUNCE_MS = 250;
+const LIVE_INFERENCE_TIMEOUT_MS = 6000;
 const WINDOW_LABELS = new Map([
   [900, "15 min"],
   [3600, "1 hour"],
@@ -179,16 +182,32 @@ let scene = null;
 let activeRow = null;
 let activeFeatures = {};
 let sandboxDirty = false;
+let inferenceApiUrl = "";
+let editRevision = 0;
+let liveInference = {
+  timer: null,
+  controller: null,
+  pending: false,
+  revision: 0,
+  result: null,
+  error: "",
+};
 
 document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
   bindDom();
+  await loadRuntimeConfig();
   scene = new DatacenterScene(dom.sceneRoot);
   dataset = window.DCVDemoData;
   if (!dataset) {
     const response = await fetch(DATA_URL);
     dataset = await response.json();
+  }
+  if (dom.datasetEyebrow) {
+    dom.datasetEyebrow.textContent = dataset.metadata.scale
+      ? `Synthetic ${dataset.metadata.scale}`
+      : "Synthetic dataset";
   }
   dom.datasetStatus.textContent = `${formatNumber(dataset.metadata.row_count)} synthetic windows`;
   populateSelectors();
@@ -201,6 +220,7 @@ async function init() {
 function bindDom() {
   const ids = [
     "dataset-status",
+    "dataset-eyebrow",
     "scene-root",
     "hud-gpus",
     "hud-fabric",
@@ -212,6 +232,7 @@ function bindDom() {
     "row-select",
     "context-status",
     "filter-status",
+    "api-status",
     "reset-row",
     "state-banner",
     "result-mode",
@@ -244,20 +265,53 @@ function populateSelectors() {
     [["all", "All sites"], ...dataset.sites.map((site) => [site.site_id, siteOptionLabel(site)])]
   );
 
-  setOptions(
-    dom.scenarioSelect,
-    [["all", "All synthetic workloads"], ...dataset.scenarios.map((item) => [item.scenario, scenarioOptionLabel(item)])]
-  );
+  syncScenarioOptions();
+  syncWindowOptions();
 
-  const windows = [...new Set(dataset.rows.map((row) => row.window_length_seconds))].sort((a, b) => a - b);
-  setOptions(dom.windowSelect, [["all", "All windows"], ...windows.map((window) => [String(window), WINDOW_LABELS.get(window) || `${window}s`])]);
-
-  dom.siteSelect.addEventListener("change", () => renderRowOptions({ resetExisting: true }));
-  dom.scenarioSelect.addEventListener("change", () => renderRowOptions({ resetExisting: true }));
+  dom.siteSelect.addEventListener("change", () => {
+    syncScenarioOptions();
+    syncWindowOptions();
+    renderRowOptions({ resetExisting: true });
+  });
+  dom.scenarioSelect.addEventListener("change", () => {
+    syncWindowOptions();
+    renderRowOptions({ resetExisting: true });
+  });
   dom.windowSelect.addEventListener("change", () => renderRowOptions({ resetExisting: true }));
   dom.rowSelect.addEventListener("change", () => {
     if (dom.rowSelect.value) setActiveRowById(dom.rowSelect.value);
   });
+}
+
+function syncScenarioOptions() {
+  const previous = dom.scenarioSelect.value || "all";
+  const rows = rowsMatching({
+    site: dom.siteSelect.value,
+    scenario: "all",
+    windowLength: "all",
+  });
+  const available = new Set(rows.map((row) => scenarioKey(row)));
+  const scenarios = dataset.scenarios.filter((item) => available.has(scenarioSummaryKey(item)));
+  setOptions(
+    dom.scenarioSelect,
+    [["all", "All scenario families"], ...scenarios.map((item) => [scenarioSummaryKey(item), scenarioOptionLabel(item)])]
+  );
+  dom.scenarioSelect.value = previous === "all" || available.has(previous) ? previous : "all";
+}
+
+function syncWindowOptions() {
+  const previous = dom.windowSelect.value || "all";
+  const rows = rowsMatching({
+    site: dom.siteSelect.value,
+    scenario: dom.scenarioSelect.value,
+    windowLength: "all",
+  });
+  const windows = [...new Set(rows.map((row) => row.window_length_seconds))].sort((a, b) => a - b);
+  setOptions(
+    dom.windowSelect,
+    [["all", "All windows"], ...windows.map((window) => [String(window), WINDOW_LABELS.get(window) || `${window}s`])]
+  );
+  dom.windowSelect.value = previous === "all" || windows.includes(Number(previous)) ? previous : "all";
 }
 
 function populateQuickPicks() {
@@ -305,12 +359,17 @@ function renderRowOptions(options = {}) {
 }
 
 function filteredRows() {
-  const site = dom.siteSelect.value;
-  const scenario = dom.scenarioSelect.value;
-  const windowLength = dom.windowSelect.value;
+  return rowsMatching({
+    site: dom.siteSelect.value,
+    scenario: dom.scenarioSelect.value,
+    windowLength: dom.windowSelect.value,
+  });
+}
+
+function rowsMatching({ site = "all", scenario = "all", windowLength = "all" } = {}) {
   return dataset.rows.filter((row) => {
     if (site !== "all" && row.site_id !== site) return false;
-    if (scenario !== "all" && row.latent_workload_class !== scenario) return false;
+    if (scenario !== "all" && scenarioKey(row) !== scenario) return false;
     if (windowLength !== "all" && String(row.window_length_seconds) !== windowLength) return false;
     return true;
   });
@@ -321,7 +380,9 @@ function setActiveRowById(rowId, options = {}) {
   if (!row) return;
   if (options.syncSelectors) {
     dom.siteSelect.value = row.site_id;
-    dom.scenarioSelect.value = row.latent_workload_class;
+    syncScenarioOptions();
+    dom.scenarioSelect.value = scenarioKey(row);
+    syncWindowOptions();
     dom.windowSelect.value = String(row.window_length_seconds);
     renderRowOptions();
   }
@@ -335,8 +396,10 @@ function setActiveRow(row, options = {}) {
   }
   activeRow = row;
   if (options.resetFeatures) {
+    clearLiveInference();
     activeFeatures = deriveFeatureState(clone(row.features));
     sandboxDirty = false;
+    editRevision += 1;
     syncControls();
   }
   dom.rowSelect.value = row.feature_row_id;
@@ -373,20 +436,38 @@ function buildControls() {
     }
     input.dataset.key = def.key;
     if (def.help) input.title = def.help;
-    input.addEventListener("input", () => {
-      applyControlValue(def, input);
-      sandboxDirty = true;
-      renderDashboard();
-    });
-    input.addEventListener("change", () => {
-      applyControlValue(def, input);
-      sandboxDirty = true;
-      renderDashboard();
-    });
+    input.addEventListener("input", () => handleControlEdit(def, input));
+    input.addEventListener("change", () => handleControlEdit(def, input));
 
     row.append(name, input, value);
     dom.controlsRoot.append(row);
   }
+}
+
+async function loadRuntimeConfig() {
+  window.DCV_CONFIG = window.DCV_CONFIG || {};
+  try {
+    const response = await fetch(CONFIG_URL, { cache: "no-store" });
+    if (response.ok) {
+      const source = await response.text();
+      Function(source)();
+    }
+  } catch (_) {
+    // Missing config.js is the normal static/offline mode.
+  }
+  const configured = String(window.DCV_CONFIG?.inferenceApiUrl || "").trim();
+  inferenceApiUrl = configured.replace(/\/+$/, "");
+  updateApiStatus(inferenceApiUrl ? "configured" : "not-configured");
+}
+
+function handleControlEdit(def, input) {
+  applyControlValue(def, input);
+  sandboxDirty = true;
+  editRevision += 1;
+  liveInference.result = null;
+  liveInference.error = "";
+  scheduleLiveInference();
+  renderDashboard();
 }
 
 function syncControls() {
@@ -486,15 +567,14 @@ function renderDashboard() {
     return;
   }
   const replay = replayResult(activeRow);
-  const result = sandboxDirty ? scoreFeatures(activeFeatures) : replay;
-  const features = sandboxDirty ? result.features : replay.features;
+  const display = currentDisplayResult(replay);
+  const result = display.result;
+  const features = display.features;
 
-  renderStateBanner(result);
+  renderStateBanner(result, display);
   dom.resetRow.disabled = false;
-  dom.resultMode.textContent = sandboxDirty ? "Edited rule sandbox" : "Calibrated model replay";
-  dom.modeDetail.textContent = sandboxDirty
-    ? `Manual edits use browser rules. Source datapoint: ${sourceRowSummary(activeRow)}.`
-    : `Selected datapoint replays the trained model export. ${sourceRowSummary(activeRow)}.`;
+  dom.resultMode.textContent = display.modeText;
+  dom.modeDetail.textContent = display.detailText;
   dom.resultLabel.textContent = `L${result.label}: ${labelName(result.label)}`;
   dom.resultLabel.style.color = labelColor(result.label);
   dom.riskFill.style.width = formatPercent(result.pLarge, 1);
@@ -513,6 +593,53 @@ function renderDashboard() {
   renderList(dom.missingList, result.criticalMissingLayers.length ? result.criticalMissingLayers : ["none flagged"], true);
   updateHud(features);
   scene.update(features, result);
+}
+
+function currentDisplayResult(replay) {
+  if (!sandboxDirty) {
+    return {
+      result: replay,
+      features: replay.features,
+      modeText: "calibrated model replay",
+      detailText: `Selected datapoint replays the trained model export. ${sourceRowSummary(activeRow)}.`,
+      bannerPrefix: `Source datapoint: ${sourceRowSummary(activeRow)}`,
+    };
+  }
+
+  if (liveInference.result && liveInference.revision === editRevision) {
+    return {
+      result: liveInference.result,
+      features: liveInference.result.features,
+      modeText: "live model inference",
+      detailText: `Edited controls scored by the live sklearn API. Source datapoint: ${sourceRowSummary(activeRow)}.`,
+      bannerPrefix: `Live sklearn inference from ${sourceRowSummary(activeRow)}`,
+    };
+  }
+
+  const fallback = scoreFeatures(activeFeatures);
+  let modeText = "offline rule sandbox";
+  let detailText = `No inference API URL configured; manual edits use browser rules. Source datapoint: ${sourceRowSummary(activeRow)}.`;
+  let bannerPrefix = `Offline rule sandbox from ${sourceRowSummary(activeRow)}`;
+  if (inferenceApiUrl) {
+    modeText = "rule fallback";
+    if (liveInference.pending) {
+      detailText = `Waiting for live sklearn API; showing browser rule fallback. Source datapoint: ${sourceRowSummary(activeRow)}.`;
+      bannerPrefix = `Rule fallback while live inference is pending from ${sourceRowSummary(activeRow)}`;
+    } else if (liveInference.error) {
+      detailText = `Live API unavailable; showing browser rule fallback. ${liveInference.error}`;
+      bannerPrefix = `Rule fallback after API error from ${sourceRowSummary(activeRow)}`;
+    } else {
+      detailText = `Live API configured; showing browser rule fallback until the response returns. Source datapoint: ${sourceRowSummary(activeRow)}.`;
+      bannerPrefix = `Rule fallback from ${sourceRowSummary(activeRow)}`;
+    }
+  }
+  return {
+    result: fallback,
+    features: fallback.features,
+    modeText,
+    detailText,
+    bannerPrefix,
+  };
 }
 
 function renderProbabilityBars(probabilities) {
@@ -592,7 +719,7 @@ function renderEmptyState() {
   });
 }
 
-function renderStateBanner(result) {
+function renderStateBanner(result, display = {}) {
   if (!activeRow) {
     dom.stateBanner.textContent = "";
     dom.stateBanner.className = "state-banner";
@@ -601,7 +728,7 @@ function renderStateBanner(result) {
   const warnings = result.consistencyWarnings || [];
   dom.stateBanner.className = warnings.length ? "state-banner warning" : "state-banner";
   if (sandboxDirty) {
-    const parts = [`Edited sandbox from ${sourceRowSummary(activeRow)}`];
+    const parts = [display.bannerPrefix || `Edited sandbox from ${sourceRowSummary(activeRow)}`];
     if (warnings.length) {
       parts.push(`Inconsistent inputs: ${warnings.join("; ")}`);
     }
@@ -625,21 +752,162 @@ function renderContextStatus(rows = filteredRows()) {
     }
   }
   if (scenario !== "all") {
-    const scenarioMeta = dataset.scenarios.find((item) => item.scenario === scenario);
+    const scenarioMeta = dataset.scenarios.find((item) => scenarioSummaryKey(item) === scenario);
     if (scenarioMeta) {
       parts.push(`${pretty(scenario)}: ${labelDistributionText(scenarioMeta.label_distribution)}`);
     }
   }
   if (!parts.length) {
-    parts.push("Filters select existing synthetic datapoints; evidence edits switch to the rule sandbox.");
+    parts.push("Filters select existing synthetic datapoints; evidence edits use live inference when configured, otherwise the rule sandbox.");
   }
   dom.contextStatus.textContent = `${parts.join(" | ")} | ${formatNumber(rows.length)} matching rows`;
+}
+
+function updateApiStatus(state, detail = "") {
+  if (!dom.apiStatus) return;
+  const labels = {
+    "not-configured": "API: not configured",
+    configured: "API: configured",
+    pending: "API: checking",
+    available: "API: available",
+    unavailable: "API: unavailable; rule fallback",
+  };
+  dom.apiStatus.textContent = detail || labels[state] || "API: unknown";
+  dom.apiStatus.className = `api-status api-${state}`;
+}
+
+function clearLiveInference() {
+  if (liveInference.timer) {
+    clearTimeout(liveInference.timer);
+  }
+  if (liveInference.controller) {
+    liveInference.controller.abort();
+  }
+  liveInference = {
+    timer: null,
+    controller: null,
+    pending: false,
+    revision: editRevision,
+    result: null,
+    error: "",
+  };
+  updateApiStatus(inferenceApiUrl ? "configured" : "not-configured");
+}
+
+function scheduleLiveInference() {
+  if (liveInference.timer) {
+    clearTimeout(liveInference.timer);
+  }
+  if (liveInference.controller) {
+    liveInference.controller.abort();
+  }
+  liveInference.result = null;
+  liveInference.error = "";
+  liveInference.revision = editRevision;
+
+  if (!inferenceApiUrl) {
+    liveInference.pending = false;
+    updateApiStatus("not-configured");
+    return;
+  }
+
+  liveInference.pending = true;
+  updateApiStatus("pending");
+  const revision = editRevision;
+  liveInference.timer = setTimeout(() => {
+    requestLiveInference(revision);
+  }, LIVE_INFERENCE_DEBOUNCE_MS);
+}
+
+async function requestLiveInference(revision) {
+  if (!activeRow || !inferenceApiUrl || revision !== editRevision) return;
+  const controller = new AbortController();
+  liveInference.controller = controller;
+  const timeout = setTimeout(() => controller.abort(), LIVE_INFERENCE_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${inferenceApiUrl}/predict`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(liveInferencePayload()),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const payload = await response.json();
+    if (revision !== editRevision) return;
+    liveInference.pending = false;
+    liveInference.error = "";
+    liveInference.result = resultFromApi(payload);
+    liveInference.revision = revision;
+    updateApiStatus("available");
+    renderDashboard();
+  } catch (error) {
+    if (revision !== editRevision) return;
+    liveInference.pending = false;
+    liveInference.result = null;
+    liveInference.error = error?.name === "AbortError" ? "Request timed out or was cancelled." : String(error?.message || error);
+    updateApiStatus("unavailable");
+    renderDashboard();
+  } finally {
+    clearTimeout(timeout);
+    if (liveInference.controller === controller) {
+      liveInference.controller = null;
+    }
+  }
+}
+
+function liveInferencePayload() {
+  return {
+    feature_row_id: activeRow?.feature_row_id || null,
+    features: clone(activeFeatures),
+    context: {
+      scope_type: activeRow?.scope_type || activeFeatures.scope_type || "topology_domain",
+      window_length_seconds: activeRow?.window_length_seconds || activeFeatures.window_length_seconds || 3600,
+    },
+    derive: true,
+    return_completed_features: true,
+  };
+}
+
+function resultFromApi(payload) {
+  const probabilities = Array.isArray(payload.probabilities)
+    ? payload.probabilities.map((value) => clamp(value))
+    : [0, 0, 0, 0, 0].map((_, label) => clamp(payload.probability_by_label?.[String(label)]));
+  const label = Number(payload.predicted_label);
+  const completed = payload.completed_features && typeof payload.completed_features === "object"
+    ? payload.completed_features
+    : {};
+  return {
+    mode: "Live model inference",
+    label,
+    labelName: labelName(label),
+    probabilities,
+    pLarge: asNumber(payload.p_large_training),
+    severity: asNumber(payload.severity_score),
+    negativeCertificationConfidence: asNumber(payload.negative_certification_confidence),
+    capacityPossible: asBool(payload.capacity_possible),
+    integrityWarning: asBool(payload.integrity_warning),
+    criticalMissingLayers: asStringArray(payload.critical_missing_layers),
+    topEvidence: asStringArray(payload.top_evidence),
+    consistencyWarnings: asStringArray(payload.input_warnings),
+    features: deriveFeatureState({ ...activeFeatures, ...completed }),
+  };
+}
+
+function asStringArray(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item)).filter(Boolean);
+  if (!value) return [];
+  return String(value)
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function updateFilterStatus(totalRows, shownRows) {
   if (!dom.filterStatus) return;
   if (totalRows === 0) {
-    dom.filterStatus.textContent = `No datapoints match ${filterSummary()}. The synthetic workload filter does not create new datapoints.`;
+    dom.filterStatus.textContent = `No datapoints match ${filterSummary()}. The scenario filter does not create new datapoints.`;
   } else if (totalRows > shownRows) {
     dom.filterStatus.textContent = `Showing first ${formatNumber(shownRows)} of ${formatNumber(totalRows)} matching datapoints.`;
   } else {
@@ -761,14 +1029,14 @@ function siteOptionLabel(site) {
 }
 
 function scenarioOptionLabel(item) {
-  return `${pretty(item.scenario)} (${formatNumber(item.rows)} rows; ${labelDistributionText(item.label_distribution)})`;
+  return `${pretty(scenarioSummaryKey(item))} (${formatNumber(item.rows)} rows; ${labelDistributionText(item.label_distribution)})`;
 }
 
 function rowOptionLabel(row) {
   const predicted = Number(row.predicted_label);
   const truth = Number(row.label_0_to_4);
   const label = predicted === truth ? `model L${predicted}` : `truth L${truth}, model L${predicted}`;
-  return `${row.site_id} | ${pretty(row.latent_workload_class)} | ${label} | ${WINDOW_LABELS.get(row.window_length_seconds)}`;
+  return `${row.site_id} | ${scenarioDisplay(row)} | ${label} | ${WINDOW_LABELS.get(row.window_length_seconds)}`;
 }
 
 function sourceRowSummary(row) {
@@ -776,7 +1044,20 @@ function sourceRowSummary(row) {
   const predicted = Number(row.predicted_label);
   const truth = Number(row.label_0_to_4);
   const label = predicted === truth ? `model L${predicted}` : `truth L${truth}, model L${predicted}`;
-  return `${row.site_id} / ${pretty(row.latent_workload_class)} / ${WINDOW_LABELS.get(row.window_length_seconds)} / ${label}`;
+  return `${row.site_id} / ${scenarioDisplay(row)} / ${WINDOW_LABELS.get(row.window_length_seconds)} / ${label}`;
+}
+
+function scenarioKey(row) {
+  return row.scenario_family || row.latent_workload_class || "unknown";
+}
+
+function scenarioSummaryKey(item) {
+  return item.scenario_family || item.scenario || "unknown";
+}
+
+function scenarioDisplay(row) {
+  const family = pretty(scenarioKey(row));
+  return row.scenario_variant ? `${family} (${pretty(row.scenario_variant)})` : family;
 }
 
 function labelDistributionText(distribution = {}) {
@@ -788,7 +1069,7 @@ function labelDistributionText(distribution = {}) {
 
 function filterSummary() {
   const site = dom.siteSelect.value === "all" ? "all sites" : dom.siteSelect.value;
-  const scenario = dom.scenarioSelect.value === "all" ? "all synthetic workloads" : pretty(dom.scenarioSelect.value);
+  const scenario = dom.scenarioSelect.value === "all" ? "all scenario families" : pretty(dom.scenarioSelect.value);
   const windowLength = dom.windowSelect.value === "all"
     ? "all windows"
     : WINDOW_LABELS.get(Number(dom.windowSelect.value)) || `${dom.windowSelect.value}s`;
