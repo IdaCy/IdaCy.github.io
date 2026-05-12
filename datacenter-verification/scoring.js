@@ -65,8 +65,110 @@ function formatNumber(value, digits = 0) {
   }).format(number);
 }
 
+function hasNonPositiveFeature(features, key) {
+  if (!Object.prototype.hasOwnProperty.call(features, key)) return false;
+  const number = Number(features[key]);
+  return Number.isFinite(number) && number <= 0;
+}
+
+function clearActiveWorkloadEvidence(out) {
+  Object.assign(out, {
+    policy_compute_ratio: 0,
+    o2_max_concurrent_normalized_gpus: 0,
+    o2_allocation_duration_hours: 0,
+    o2_gpu_hours_policy_ratio: 0,
+    o2_concurrency_fraction_domain: 0,
+    o2_declared_workload_class: "none",
+    o2_reservation_exclusive_flag: false,
+    o2_elastic_resize_count: 0,
+    o2_preemption_restart_count: 0,
+    o2_scheduler_queue_delay_hours: 0,
+    o2_job_array_width: 0,
+    o2_reservation_reuse_count: 0,
+    o3_batch_provisioned_gpus: 0,
+    o3_capacity_reservation_duration_hours: 0,
+    o3_training_sku_fraction: 0,
+    o3_billing_continuity_score: 0,
+    o3_egress_tb: 0,
+    o4_gpu_util_p50: 0,
+    o4_gpu_util_p95: 0,
+    o4_gpu_util_duty_gt_70: 0,
+    o4_sm_tensor_active_p95: 0,
+    o4_hbm_used_fraction_p50: 0,
+    o4_hbm_bandwidth_active_p95: 0,
+    o4_gpu_power_fraction_p95: 0,
+    o4_error_spike_score: 0,
+    o4_gpu_util_cv: 0,
+    o4_gpu_idle_gap_p95_minutes: 60,
+    o4_hbm_pressure_duration_fraction: 0,
+    o4_power_cap_active_fraction: 0,
+    o4_thermal_throttle_fraction: 0,
+    o5_kernel_training_motif_score: 0,
+    o5_tensor_throughput_ratio: 0,
+    o5_profiler_available: false,
+    o6_nvlink_util_p95: 0,
+    o6_nvlink_periodicity_score: 0,
+    o6_link_error_spike_score: 0,
+    o7_scaleout_port_util_p95: 0,
+    o7_synchronized_fabric_footprint: 0,
+    o7_collective_periodicity_score: 0,
+    o7_burst_duty_cycle: 0,
+    o7_rdma_congestion_score: 0,
+    o7_job_to_port_mapping_coverage: 0,
+    o7_flow_entropy_score: 0,
+    o7_cross_section_sync_score: 0,
+    o7_collective_jitter_score: 0,
+    o7_storage_traffic_fraction: 0,
+    o7_inference_fanout_score: 0,
+    o7_account_flow_linkage_confidence: 0,
+    o8_rack_power_fraction_p95: Math.min(asNumber(out.o8_rack_power_fraction_p95), 0.15),
+    o8_baseline_subtracted_energy_kwh: 0,
+    o8_power_cv: 0,
+    o8_power_to_gpu_residual: 0,
+    o8_power_baseline_drift_score: 0,
+    o8_power_cap_or_curtailment_active: false,
+    o8_unattributed_power_fraction: 0,
+    o9_gpu_hbm_temp_score: 0,
+    o9_thermal_delta_t_score: 0,
+    o9_cooling_flow_duty: 0,
+    o9_cooling_maintenance_active: false,
+    o9_thermal_throttle_support_score: 0,
+    o10_world_size: 0,
+    o10_runtime_framework_class: "none",
+    o10_rank_stability_score: 0,
+    o10_same_image_gpu_count: 0,
+    o10_rendezvous_present: false,
+    o10_runtime_metadata_confidence: 1,
+    o10_declared_vs_observed_mismatch_score: 0,
+    o11_data_staging_tb: 0,
+    o11_checkpoint_write_tb_per_event: 0,
+    o11_checkpoint_periodicity_score: 0,
+    o11_read_write_training_pattern_score: 0,
+    o11_checkpoint_jitter_score: 0,
+    o11_artifact_write_pattern_score: 0,
+    o11_dataloader_read_pattern_score: 0,
+    o11_backup_or_replication_pattern_score: 0,
+    o11_storage_cotraffic_score: 0,
+    o12_signed_ml_logs_present: false,
+    o12_declared_parameter_count_b: 0,
+    o12_training_tokens_b: 0,
+    o12_step_count: 0,
+    o12_loss_curve_present: false,
+    o12_optimizer_state_present: false,
+    o12_log_delivery_delay_hours: 0,
+    o12_log_completeness_fraction: 1,
+    o12_declaration_consistency_score: 1,
+  });
+}
+
 function deriveFeatureState(features) {
   const out = { ...features };
+  if (
+    hasNonPositiveFeature(out, "o2_max_concurrent_normalized_gpus") ||
+    hasNonPositiveFeature(out, "o2_allocation_duration_hours")
+  ) {
+    clearActiveWorkloadEvidence(out);
+  }
   const capacity = asNumber(out.o1_normalized_h100e_capacity);
   const allocation = asNumber(out.o2_max_concurrent_normalized_gpus);
   const duration = asNumber(out.o2_allocation_duration_hours);
@@ -150,6 +252,7 @@ function evidenceFlags(inputFeatures) {
   const declaredClass = String(row.o2_declared_workload_class || "").toLowerCase();
   const o4Missing = String(row.o4_missing_reason || "");
   const hasConsistencyWarnings = consistencyWarnings(row).length > 0;
+  const noActiveAllocation = allocationGpus <= 0 && allocationHours <= 0;
 
   const allocation =
     allocationGpus >= 512 ||
@@ -190,6 +293,7 @@ function evidenceFlags(inputFeatures) {
     row,
     capacity,
     externalConflict,
+    noActiveAllocation,
     allocation,
     gpuActivity,
     fabricSync,
@@ -211,6 +315,9 @@ function predictRuleLabel(features) {
   const primaryCount = Number(flags.allocation) + Number(flags.gpuActivity) + Number(flags.fabricSync);
   const semanticCount = Number(flags.runtimeSemantic) + Number(flags.storageSemantic) + Number(flags.mlSemantic);
 
+  if (flags.noActiveAllocation) {
+    return 0;
+  }
   if (!flags.capacity && !flags.externalConflict) {
     return flags.strongCoverage ? 0 : 1;
   }
@@ -276,6 +383,7 @@ function topEvidenceForFeatures(features) {
   const o4Missing = String(row.o4_missing_reason || "");
   const runtime = String(row.o10_runtime_framework_class || "");
   const declaredClass = String(row.o2_declared_workload_class || "").toLowerCase();
+  const noActiveAllocation = allocationGpus <= 0 && allocationHours <= 0;
   const reservedWithoutActivity =
     (declaredClass === "reserved" || asBool(row.o2_reservation_exclusive_flag)) &&
     allocationGpus >= 512 &&
@@ -288,6 +396,7 @@ function topEvidenceForFeatures(features) {
     checkpoint < 0.2 &&
     !signedLogs;
 
+  if (noActiveAllocation) evidence.push("no active allocation");
   if (o4Missing === "collector_gap") evidence.push("GPU telemetry collector gap");
   if (ccFraction > 0.5 || o4Missing === "counter_disabled_by_cc_mode") {
     evidence.push("counter disabled by confidential-compute mode");
