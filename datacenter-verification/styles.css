@@ -137,6 +137,74 @@ input:disabled {
   inset: 0;
 }
 
+#scene-root canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.scene-fallback {
+  --fabric-opacity: 0;
+  --power-opacity: 0;
+  --integrity-opacity: 0;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 0;
+  width: min(76%, 660px);
+  max-width: calc(100% - 70px);
+  aspect-ratio: 12 / 5.4;
+  transform: translate(-50%, -45%) perspective(720px) rotateX(58deg) rotateZ(-4deg);
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 22px;
+  border: 2px solid rgba(23, 32, 28, 0.24);
+  background:
+    linear-gradient(rgba(217, 121, 37, var(--power-opacity)), rgba(217, 121, 37, var(--power-opacity))),
+    linear-gradient(135deg, rgba(255,255,255,0.42), rgba(205,211,206,0.4));
+  box-shadow:
+    0 32px 70px rgba(23, 32, 28, 0.14),
+    0 0 0 5px rgba(196, 63, 77, var(--integrity-opacity));
+}
+
+.scene-fallback::before {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  opacity: var(--fabric-opacity);
+  background:
+    repeating-linear-gradient(22deg, transparent 0 28px, rgba(25, 143, 178, 0.84) 29px 31px, transparent 32px 62px),
+    repeating-linear-gradient(156deg, transparent 0 40px, rgba(25, 143, 178, 0.44) 41px 43px, transparent 44px 82px);
+  pointer-events: none;
+}
+
+.fallback-rack {
+  position: relative;
+  z-index: 1;
+  display: block;
+  min-width: 0;
+  border: 1px solid rgba(23, 32, 28, 0.22);
+  border-radius: 3px;
+  background: #9aa39f;
+  box-shadow: inset 0 5px 0 rgba(255, 255, 255, 0.22);
+  transform: scaleY(var(--rack-scale, 0.8));
+  transform-origin: bottom;
+}
+
+.fallback-rack.active {
+  background: #3c78a8;
+  box-shadow:
+    inset 0 5px 0 rgba(255, 255, 255, 0.18),
+    0 0 16px rgba(20, 150, 111, 0.56);
+}
+
+.scene-fallback.storage-active .fallback-rack:nth-last-child(-n + 9) {
+  border-bottom-color: var(--storage);
+  border-bottom-width: 4px;
+}
+
 .scene-hud {
   position: absolute;
   top: 16px;
@@ -341,12 +409,17 @@ label {
   background: var(--panel-strong);
 }
 
-#risk-fill {
+#risk-fill,
+#evasion-fill {
   width: 0;
   height: 100%;
   border-radius: inherit;
   background: var(--ok);
   transition: width 180ms ease, background-color 180ms ease;
+}
+
+.evasion-meter {
+  margin-top: 13px;
 }
 
 .risk-row,
@@ -369,7 +442,7 @@ label {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
 }
 
@@ -470,7 +543,7 @@ label {
 
 .evidence-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
   padding-bottom: 18px;
 }

@@ -1,9 +1,12 @@
 (function () {
 const {
-  asBool,
   asNumber,
+  cadenceScore,
   clamp,
   deriveFeatureState,
+  evasionColor,
+  evasionName,
+  formatBytes,
   formatNumber,
   formatPercent,
   labelColor,
@@ -15,173 +18,239 @@ const {
 const { DatacenterScene } = window;
 
 const DATA_URL = "./data/demo-data.json";
-const CONFIG_URL = "./config.js";
-const LIVE_INFERENCE_DEBOUNCE_MS = 250;
-const LIVE_INFERENCE_TIMEOUT_MS = 6000;
-const KNOWN_METADATA_ONLY_FEATURES = new Set([
-  "capacity_evidence_only",
-  "integrity_evidence_only",
-  "physical_evidence_only",
-]);
 const WINDOW_LABELS = new Map([
   [900, "15 min"],
   [3600, "1 hour"],
   [21600, "6 hours"],
   [86400, "1 day"],
 ]);
-const NO_ACTIVE_ALLOCATION_KEYS = new Set([
-  "o2_max_concurrent_normalized_gpus",
-  "o2_allocation_duration_hours",
-]);
+const POLICY_GPU_HOURS = 512 * 24;
 
 const controlDefs = [
   {
-    key: "o1_normalized_h100e_capacity",
-    label: "H100e-equiv capacity",
-    help: "Hardware-normalized accelerator capacity. This is a capacity gate, not evidence that a run is active.",
+    key: "o1_normalized_training_compute_capacity",
+    label: "Training-capable capacity",
+    help: "Hardware-normalized accelerator capacity. Capacity is a feasibility gate, not activity evidence.",
     type: "range",
     min: 0,
-    max: 4096,
+    max: 8192,
     step: 64,
     format: (value) => formatNumber(value, 0),
   },
   {
-    key: "o2_max_concurrent_normalized_gpus",
-    label: "Allocated GPUs",
-    help: "Maximum concurrent H100e-equivalent GPUs allocated in the selected window.",
+    key: "o1_largest_low_latency_topology_footprint",
+    label: "Low-latency topology",
+    help: "Largest topology footprint where synchronized distributed training is plausible.",
     type: "range",
     min: 0,
-    max: 2600,
+    max: 8192,
+    step: 64,
+    format: (value) => formatNumber(value, 0),
+  },
+  {
+    key: "o1_partitioning_fraction",
+    label: "Partitioning fraction",
+    help: "Higher partitioning generally weakens a single monolithic training-run interpretation.",
+    type: "range",
+    min: 0,
+    max: 1,
+    step: 0.01,
+    format: (value) => formatPercent(value, 0),
+  },
+  {
+    key: "o2_allocated_accelerator_count",
+    label: "Allocated accelerators",
+    help: "Scheduler or control-plane allocation count. Zero allocation does not erase independent activity evidence.",
+    type: "range",
+    min: 0,
+    max: 4096,
     step: 16,
     format: (value) => formatNumber(value, 0),
   },
   {
-    key: "o2_allocation_duration_hours",
+    key: "o2_allocation_duration",
     label: "Allocation duration",
-    help: "Allocation or linked-job duration in hours. It is interpreted together with allocated GPUs.",
+    help: "Allocation duration in hours. Count times duration is the policy-scale compute anchor.",
     type: "range",
     min: 0,
-    max: 420,
+    max: 240,
     step: 1,
     format: (value) => `${formatNumber(value, 0)} h`,
   },
   {
-    key: "o4_gpu_util_p95",
-    label: "GPU utilization p95",
-    help: "P95 GPU busy/utilization percent. High utilization is activity evidence, not training semantics by itself.",
+    key: "o3_batch_provisioning_event_size",
+    label: "Cloud batch provisioning",
+    help: "Large synchronized provisioning events are primary cloud-side candidate evidence.",
     type: "range",
     min: 0,
-    max: 100,
-    step: 1,
-    format: (value) => `${formatNumber(value, 0)}%`,
-  },
-  {
-    key: "o4_sm_tensor_active_p95",
-    label: "Tensor activity p95",
-    help: "P95 tensor-core or tensor-pipe activity. High values support training-like compute activity.",
-    type: "range",
-    min: 0,
-    max: 100,
-    step: 1,
-    format: (value) => `${formatNumber(value, 0)}%`,
-  },
-  {
-    key: "o7_synchronized_fabric_footprint",
-    label: "Fabric footprint",
-    help: "Approximate size of synchronized scale-out fabric behavior. Large values support one coordinated distributed job.",
-    type: "range",
-    min: 0,
-    max: 2400,
+    max: 4096,
     step: 16,
     format: (value) => formatNumber(value, 0),
   },
   {
-    key: "o7_collective_periodicity_score",
-    label: "Collective periodicity",
-    help: "0-1 score for periodic collective communication such as all-reduce bursts.",
+    key: "o4_gpu_busy_percent",
+    label: "GPU busy",
+    help: "GPU busy percent. High activity supports a run only when cross-layer context aligns.",
+    type: "range",
+    min: 0,
+    max: 100,
+    step: 1,
+    format: (value) => `${formatNumber(value, 0)}%`,
+  },
+  {
+    key: "o4_sm_tensor_core_active_percent",
+    label: "Tensor activity",
+    help: "Tensor-core or tensor-pipe activity percent.",
+    type: "range",
+    min: 0,
+    max: 100,
+    step: 1,
+    format: (value) => `${formatNumber(value, 0)}%`,
+  },
+  {
+    key: "o4_gpu_power_draw_or_fraction",
+    label: "GPU power fraction",
+    help: "GPU-level power draw as a fraction of expected peak or cap.",
     type: "range",
     min: 0,
     max: 1,
     step: 0.01,
-    format: (value) => formatNumber(value, 2),
+    format: (value) => formatPercent(value, 0),
   },
   {
-    key: "o8_rack_power_fraction_p95",
-    label: "Rack power p95",
-    help: "P95 rack or facility power fraction. Power corroborates activity but does not identify workload semantics alone.",
+    key: "o7_synchronized_fabric_footprint",
+    label: "Synchronized fabric footprint",
+    help: "Approximate number of accelerators participating in synchronized scale-out fabric behavior.",
+    type: "range",
+    min: 0,
+    max: 4096,
+    step: 16,
+    format: (value) => formatNumber(value, 0),
+  },
+  {
+    key: "o7_scaleout_port_utilization",
+    label: "Scale-out port utilization",
+    help: "Network-scale utilization. This is one of the highest-value activity features in the catalog.",
+    type: "range",
+    min: 0,
+    max: 100,
+    step: 1,
+    format: (value) => `${formatNumber(value, 0)}%`,
+  },
+  {
+    key: "o7_collective_periodicity_step_cadence",
+    label: "Collective cadence",
+    help: "Seconds between periodic collective communication bursts. 2-90 seconds is treated as strong cadence evidence.",
+    type: "range",
+    min: 0,
+    max: 600,
+    step: 5,
+    format: (value) => (asNumber(value) > 0 ? `${formatNumber(value, 0)} s` : "none"),
+  },
+  {
+    key: "o8_rack_it_power_kw",
+    label: "Rack / IT power",
+    help: "Mapped rack or IT power in kW. Power corroborates activity but cannot identify training alone.",
+    type: "range",
+    min: 0,
+    max: 12000,
+    step: 50,
+    format: (value) => `${formatNumber(value, 0)} kW`,
+  },
+  {
+    key: "o11_checkpoint_write_size",
+    label: "Checkpoint write size",
+    help: "Large periodic checkpoint-like writes support training only with compute/fabric alignment.",
+    type: "range",
+    min: 0,
+    max: 6000000000000,
+    step: 50000000000,
+    format: formatBytes,
+  },
+  {
+    key: "o11_checkpoint_period",
+    label: "Checkpoint period",
+    help: "Checkpoint interval in seconds. Values in the 10 minute to 6 hour range support training-like storage cadence.",
+    type: "range",
+    min: 0,
+    max: 21600,
+    step: 300,
+    format: (value) => (asNumber(value) > 0 ? `${formatNumber(value / 3600, 1)} h` : "none"),
+  },
+  {
+    key: "o14_telemetry_coverage_fraction_by_layer",
+    label: "Telemetry coverage",
+    help: "Cross-layer telemetry coverage. Low coverage weakens no-run confidence and can raise integrity risk.",
     type: "range",
     min: 0,
     max: 1,
     step: 0.01,
-    format: (value) => formatPercent(value),
+    format: (value) => formatPercent(value, 0),
   },
   {
-    key: "o11_checkpoint_periodicity_score",
-    label: "Checkpoint cadence",
-    help: "0-1 score for periodic checkpoint or training-storage cadence.",
-    type: "range",
-    min: 0,
-    max: 1,
-    step: 0.01,
-    format: (value) => formatNumber(value, 2),
-  },
-  {
-    key: "o14_min_critical_coverage",
-    label: "Critical coverage",
-    help: "Minimum coverage across critical monitoring layers. Low coverage weakens no-run claims.",
-    type: "range",
-    min: 0,
-    max: 1,
-    step: 0.01,
-    format: (value) => formatPercent(value),
-  },
-  {
-    key: "o14_gap_fraction_critical",
+    key: "o14_telemetry_gap_fraction_missed_scrapes",
     label: "Telemetry gap fraction",
-    help: "Fraction of critical telemetry missing in the window. Gaps are integrity evidence, not no-activity evidence.",
+    help: "Fraction of missed scrapes or missing critical telemetry during the candidate window.",
     type: "range",
     min: 0,
     max: 1,
     step: 0.01,
-    format: (value) => formatPercent(value),
+    format: (value) => formatPercent(value, 0),
   },
   {
-    key: "o13_confidential_compute_mode_fraction",
-    label: "Confidential-compute share",
-    help: "Share of monitored devices/time in confidential-compute mode, which can legitimately suppress counters.",
-    type: "range",
-    min: 0,
-    max: 1,
-    step: 0.01,
-    format: (value) => formatPercent(value),
+    key: "o13_confidential_compute_security_mode",
+    label: "Confidential-compute mode",
+    help: "Declared confidential-compute/security mode can explain unavailable counters when consistent.",
+    type: "select",
+    optionsKey: "o13_confidential_compute_security_mode",
   },
   {
-    key: "o12_signed_ml_logs_present",
-    label: "Signed ML logs",
-    help: "Authenticated ML-layer logs or declarations. This is high-value semantic evidence when present.",
-    type: "checkbox",
-    format: (value) => (asBool(value) ? "present" : "absent"),
+    key: "o5_profiler_availability_state",
+    label: "Profiler availability",
+    help: "Blocked or disabled profiler/counter availability raises discrepancy risk when not explained by security mode.",
+    type: "select",
+    optionsKey: "o5_profiler_availability_state",
   },
   {
     key: "o10_runtime_framework_class",
     label: "Runtime class",
-    help: "Host/container runtime class. Training runtimes are semantic evidence; inference/HPC/benchmark runtimes are false-positive context.",
+    help: "Training runtimes are semantic evidence; inference/HPC/benchmark runtimes are countervailing context.",
     type: "select",
     optionsKey: "o10_runtime_framework_class",
   },
   {
     key: "o2_declared_workload_class",
-    label: "Declared class",
-    help: "Self-declared scheduler/allocation workload class. Unsigned declarations are weak evidence and need corroboration.",
+    label: "Declared workload class",
+    help: "Self-declared workload class is weak evidence and can be adversarial or stale.",
     type: "select",
     optionsKey: "o2_declared_workload_class",
   },
   {
-    key: "o4_missing_reason",
-    label: "GPU telemetry availability",
-    help: "Whether GPU telemetry was observed, gapped, or suppressed by confidential-compute mode.",
+    key: "o12_loss_optimizer_checkpoint_metadata",
+    label: "ML metadata",
+    help: "Loss, optimizer, checkpoint, or signed ML metadata is strong semantic support when authenticated.",
     type: "select",
-    optionsKey: "o4_missing_reason",
+    optionsKey: "o12_loss_optimizer_checkpoint_metadata",
+  },
+  {
+    key: "o17_external_it_power_capacity_estimate",
+    label: "External IT capacity estimate",
+    help: "External power or capacity estimates can reveal inventory discrepancies, not active training by themselves.",
+    type: "range",
+    min: 0,
+    max: 30,
+    step: 0.1,
+    format: (value) => `${formatNumber(value, 1)} MW`,
+  },
+  {
+    key: "o16_probe_throughput_ratio",
+    label: "Active probe throughput ratio",
+    help: "Unexpectedly low active-probe throughput during claimed idle can raise weak-trust suspicion.",
+    type: "range",
+    min: 0,
+    max: 1.5,
+    step: 0.01,
+    format: (value) => formatNumber(value, 2),
   },
 ];
 
@@ -190,40 +259,28 @@ let dataset = null;
 let scene = null;
 let activeRow = null;
 let activeFeatures = {};
-let lastActiveAllocationFeatures = null;
 let sandboxDirty = false;
-let inferenceApiUrl = "";
-let editRevision = 0;
-let liveInference = {
-  timer: null,
-  controller: null,
-  pending: false,
-  revision: 0,
-  result: null,
-  error: "",
-};
 
 document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
   bindDom();
-  await loadRuntimeConfig();
   scene = new DatacenterScene(dom.sceneRoot);
   dataset = window.DCVDemoData;
   if (!dataset) {
     const response = await fetch(DATA_URL);
     dataset = await response.json();
   }
-  if (dom.datasetEyebrow) {
-    dom.datasetEyebrow.textContent = dataset.metadata.scale
-      ? `Synthetic ${dataset.metadata.scale}`
-      : "Synthetic dataset";
-  }
+
+  dom.datasetEyebrow.textContent = dataset.metadata.catalog_id || "catalog v2";
   dom.datasetStatus.textContent = `${formatNumber(dataset.metadata.row_count)} synthetic windows`;
+  if (dom.apiStatus) dom.apiStatus.textContent = "Catalog v2 deterministic evaluator";
+
   populateSelectors();
   populateQuickPicks();
   buildControls();
-  const initialRowId = dataset.example_rows["4"] || dataset.rows[0].feature_row_id;
+
+  const initialRowId = dataset.example_rows?.["4"] || dataset.rows[0]?.feature_row_id;
   setActiveRowById(initialRowId, { syncSelectors: true });
 }
 
@@ -250,19 +307,21 @@ function bindDom() {
     "result-label",
     "risk-fill",
     "p-large",
+    "evasion-fill",
+    "p-evasion",
     "severity-score",
     "negative-confidence",
     "integrity-status",
     "capacity-status",
+    "evasion-status",
     "probability-bars",
     "policy-ratio",
     "controls-root",
     "evidence-list",
     "missing-list",
+    "evasion-list",
   ];
-  for (const id of ids) {
-    dom[toCamel(id)] = document.getElementById(id);
-  }
+  for (const id of ids) dom[toCamel(id)] = document.getElementById(id);
 }
 
 function toCamel(id) {
@@ -270,24 +329,21 @@ function toCamel(id) {
 }
 
 function populateSelectors() {
-  setOptions(
-    dom.siteSelect,
-    [["all", "All sites"], ...dataset.sites.map((site) => [site.site_id, siteOptionLabel(site)])]
-  );
-
+  setOptions(dom.siteSelect, [["all", "All sites"], ...dataset.sites.map((site) => [site.site_id, siteOptionLabel(site)])]);
   syncScenarioOptions();
   syncWindowOptions();
+  renderRowOptions({ skipActivation: true });
 
   dom.siteSelect.addEventListener("change", () => {
     syncScenarioOptions();
     syncWindowOptions();
-    renderRowOptions({ resetExisting: true });
+    renderRowOptions();
   });
   dom.scenarioSelect.addEventListener("change", () => {
     syncWindowOptions();
-    renderRowOptions({ resetExisting: true });
+    renderRowOptions();
   });
-  dom.windowSelect.addEventListener("change", () => renderRowOptions({ resetExisting: true }));
+  dom.windowSelect.addEventListener("change", () => renderRowOptions());
   dom.rowSelect.addEventListener("change", () => {
     if (dom.rowSelect.value) setActiveRowById(dom.rowSelect.value);
   });
@@ -295,40 +351,32 @@ function populateSelectors() {
 
 function syncScenarioOptions() {
   const previous = dom.scenarioSelect.value || "all";
-  const rows = rowsMatching({
-    site: dom.siteSelect.value,
-    scenario: "all",
-    windowLength: "all",
-  });
-  const scenarios = scenarioOptionsFromRows(rows);
-  const available = new Set(scenarios.map((item) => item.key));
-  setOptions(
-    dom.scenarioSelect,
-    [["all", "All scenario variants"], ...scenarios.map((item) => [item.key, scenarioOptionLabel(item)])]
-  );
+  const rows = rowsMatching({ site: dom.siteSelect.value, scenario: "all", windowLength: "all" });
+  const keys = [...new Set(rows.map((row) => row.scenario_family))].sort();
+  const available = new Set(keys);
+  setOptions(dom.scenarioSelect, [["all", "All scenario families"], ...keys.map((key) => [key, scenarioOptionLabel(key)])]);
   dom.scenarioSelect.value = previous === "all" || available.has(previous) ? previous : "all";
 }
 
 function syncWindowOptions() {
   const previous = dom.windowSelect.value || "all";
-  const rows = rowsMatching({
-    site: dom.siteSelect.value,
-    scenario: dom.scenarioSelect.value,
-    windowLength: "all",
-  });
+  const rows = rowsMatching({ site: dom.siteSelect.value, scenario: dom.scenarioSelect.value, windowLength: "all" });
   const windows = [...new Set(rows.map((row) => row.window_length_seconds))].sort((a, b) => a - b);
-  setOptions(
-    dom.windowSelect,
-    [["all", "All windows"], ...windows.map((window) => [String(window), WINDOW_LABELS.get(window) || `${window}s`])]
-  );
+  setOptions(dom.windowSelect, [["all", "All windows"], ...windows.map((value) => [String(value), WINDOW_LABELS.get(value) || `${value}s`])]);
   dom.windowSelect.value = previous === "all" || windows.includes(Number(previous)) ? previous : "all";
 }
 
 function populateQuickPicks() {
   document.querySelectorAll("[data-example-label]").forEach((button) => {
     button.addEventListener("click", () => {
-      const rowId = dataset.example_rows[button.dataset.exampleLabel];
-      setActiveRowById(rowId, { syncSelectors: true });
+      const rowId = dataset.example_rows?.[button.dataset.exampleLabel];
+      if (rowId) setActiveRowById(rowId, { syncSelectors: true });
+    });
+  });
+  document.querySelectorAll("[data-evasion-label]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const rowId = dataset.evasion_example_rows?.[button.dataset.evasionLabel];
+      if (rowId) setActiveRowById(rowId, { syncSelectors: true });
     });
   });
   dom.resetRow.addEventListener("click", () => setActiveRow(activeRow, { resetFeatures: true }));
@@ -344,29 +392,20 @@ function renderRowOptions(options = {}) {
     setControlsDisabled(true);
     dom.resetRow.disabled = true;
     activeRow = null;
-    lastActiveAllocationFeatures = null;
     sandboxDirty = false;
     renderEmptyState();
     return;
   }
+
+  const limitedRows = rows.slice(0, 700);
+  setOptions(dom.rowSelect, limitedRows.map((row) => [row.feature_row_id, rowOptionLabel(row)]));
   dom.rowSelect.disabled = false;
   setControlsDisabled(false);
   dom.resetRow.disabled = false;
-  const limitedRows = rows.slice(0, 700);
-  setOptions(
-    dom.rowSelect,
-    limitedRows.map((row) => [
-      row.feature_row_id,
-      rowOptionLabel(row),
-    ])
-  );
-  if (!limitedRows.some((row) => row.feature_row_id === activeRow?.feature_row_id)) {
-    setActiveRow(limitedRows[0] || dataset.rows[0], { resetFeatures: true });
-  } else if (options.resetExisting) {
-    setActiveRow(activeRow, { resetFeatures: true });
-  } else {
-    dom.rowSelect.value = activeRow.feature_row_id;
-  }
+
+  const target = limitedRows.find((row) => row.feature_row_id === activeRow?.feature_row_id) || limitedRows[0];
+  dom.rowSelect.value = target.feature_row_id;
+  if (!options.skipActivation) setActiveRow(target, { resetFeatures: true });
 }
 
 function filteredRows() {
@@ -380,8 +419,8 @@ function filteredRows() {
 function rowsMatching({ site = "all", scenario = "all", windowLength = "all" } = {}) {
   return dataset.rows.filter((row) => {
     if (site !== "all" && row.site_id !== site) return false;
-    if (scenario !== "all" && scenarioKey(row) !== scenario) return false;
-    if (windowLength !== "all" && String(row.window_length_seconds) !== windowLength) return false;
+    if (scenario !== "all" && row.scenario_family !== scenario) return false;
+    if (windowLength !== "all" && String(row.window_length_seconds) !== String(windowLength)) return false;
     return true;
   });
 }
@@ -392,10 +431,10 @@ function setActiveRowById(rowId, options = {}) {
   if (options.syncSelectors) {
     dom.siteSelect.value = row.site_id;
     syncScenarioOptions();
-    dom.scenarioSelect.value = scenarioKey(row);
+    dom.scenarioSelect.value = row.scenario_family;
     syncWindowOptions();
     dom.windowSelect.value = String(row.window_length_seconds);
-    renderRowOptions();
+    renderRowOptions({ skipActivation: true });
   }
   setActiveRow(row, { resetFeatures: true });
 }
@@ -407,11 +446,8 @@ function setActiveRow(row, options = {}) {
   }
   activeRow = row;
   if (options.resetFeatures) {
-    clearLiveInference();
-    activeFeatures = deriveFeatureState(clone(row.features));
-    lastActiveAllocationFeatures = null;
+    activeFeatures = deriveFeatureState(clone(row.features), activeSite(row));
     sandboxDirty = false;
-    editRevision += 1;
     syncControls();
   }
   dom.rowSelect.value = row.feature_row_id;
@@ -424,10 +460,10 @@ function buildControls() {
     const row = document.createElement("label");
     row.className = "control-row";
     row.dataset.controlKey = def.key;
-    if (def.help) row.title = def.help;
+    row.title = def.help || "";
+
     const name = document.createElement("span");
     name.textContent = def.label;
-    if (def.help) name.title = def.help;
     const value = document.createElement("strong");
     value.className = "control-value";
     value.dataset.valueFor = def.key;
@@ -435,7 +471,7 @@ function buildControls() {
     let input;
     if (def.type === "select") {
       input = document.createElement("select");
-      const values = dataset.categorical_values[def.optionsKey] || [];
+      const values = dataset.categorical_values?.[def.optionsKey] || def.options || [];
       setOptions(input, values.map((option) => [option, pretty(option)]));
     } else {
       input = document.createElement("input");
@@ -446,158 +482,70 @@ function buildControls() {
         input.step = def.step;
       }
     }
+
     input.dataset.key = def.key;
-    if (def.help) input.title = def.help;
+    input.title = def.help || "";
     input.addEventListener("input", () => handleControlEdit(def, input));
     input.addEventListener("change", () => handleControlEdit(def, input));
-
     row.append(name, input, value);
     dom.controlsRoot.append(row);
   }
 }
 
-async function loadRuntimeConfig() {
-  window.DCV_CONFIG = window.DCV_CONFIG || {};
-  try {
-    const response = await fetch(CONFIG_URL, { cache: "no-store" });
-    if (response.ok) {
-      const source = await response.text();
-      Function(source)();
-    }
-  } catch (_) {
-    // Missing config.js is the normal static/offline mode.
-  }
-  const configured = String(window.DCV_CONFIG?.inferenceApiUrl || "").trim();
-  inferenceApiUrl = configured.replace(/\/+$/, "");
-  updateApiStatus(inferenceApiUrl ? "configured" : "not-configured");
+function handleControlEdit(def, input) {
+  activeFeatures[def.key] = controlInputValue(def, input);
+  applyControlSideEffects(def.key);
+  activeFeatures = deriveFeatureState(activeFeatures, activeSite());
+  sandboxDirty = true;
+  syncControls();
+  renderDashboard();
 }
 
-function handleControlEdit(def, input) {
-  const previousValue = activeFeatures[def.key];
-  const nextValue = controlInputValue(def, input);
-  if (controlValuesEqual(previousValue, nextValue)) {
-    updateControlValue(def);
-    return;
+function controlInputValue(def, input) {
+  if (def.type === "range") return Number(input.value);
+  return input.value;
+}
+
+function applyControlSideEffects(key) {
+  if (key === "o13_confidential_compute_security_mode" && activeFeatures[key] === "on") {
+    activeFeatures.o5_profiler_availability_state = "confidential_compute_blocked";
+    activeFeatures.o14_telemetry_coverage_fraction_by_layer = Math.min(
+      asNumber(activeFeatures.o14_telemetry_coverage_fraction_by_layer, 1),
+      0.75
+    );
   }
-  applyControlValue(def, input, nextValue, clone(activeFeatures));
-  sandboxDirty = true;
-  editRevision += 1;
-  liveInference.error = "";
-  scheduleLiveInference();
-  renderDashboard();
+  if (key === "o5_profiler_availability_state" && activeFeatures[key] === "available") {
+    if (activeFeatures.o13_confidential_compute_security_mode === "on") {
+      activeFeatures.o13_confidential_compute_security_mode = "off";
+    }
+  }
+  if (key === "o14_telemetry_gap_fraction_missed_scrapes") {
+    const gap = clamp(activeFeatures.o14_telemetry_gap_fraction_missed_scrapes);
+    activeFeatures.o14_telemetry_coverage_fraction_by_layer = Math.min(
+      asNumber(activeFeatures.o14_telemetry_coverage_fraction_by_layer, 1),
+      1 - gap * 0.5
+    );
+  }
 }
 
 function syncControls() {
   for (const def of controlDefs) {
     const input = dom.controlsRoot.querySelector(`[data-key="${def.key}"]`);
-    const value = activeFeatures[def.key];
     if (!input) continue;
-    if (def.type === "checkbox") input.checked = asBool(value);
-    else input.value = value ?? "";
-    updateControlValue(def);
-  }
-}
-
-function controlInputValue(def, input) {
-  if (def.type === "checkbox") return input.checked;
-  if (def.type === "range") return Number(input.value);
-  return input.value;
-}
-
-function controlValuesEqual(left, right) {
-  if (typeof left === "boolean" || typeof right === "boolean") {
-    return asBool(left) === asBool(right);
-  }
-  if (typeof left === "number" || typeof right === "number") {
-    const leftNumber = Number(left);
-    const rightNumber = Number(right);
-    if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
-      return Math.abs(leftNumber - rightNumber) < 1e-9;
-    }
-  }
-  return String(left ?? "") === String(right ?? "");
-}
-
-function controlDefForKey(key) {
-  return controlDefs.find((def) => def.key === key);
-}
-
-function clampToControlRange(key, value) {
-  const def = controlDefForKey(key);
-  if (!def || def.type !== "range") return value;
-  const min = asNumber(def.min);
-  const max = asNumber(def.max);
-  const step = asNumber(def.step, 1);
-  const clamped = Math.min(max, Math.max(min, asNumber(value)));
-  if (step <= 0) return clamped;
-  const stepped = min + Math.floor((clamped - min) / step) * step;
-  return Math.min(max, Math.max(min, stepped));
-}
-
-function positiveControlValue(key, sourceValue, fallback) {
-  const sourceNumber = asNumber(sourceValue);
-  const value = sourceNumber > 0 ? sourceNumber : fallback;
-  return clampToControlRange(key, Math.max(fallback, value));
-}
-
-function applyControlValue(def, input, value = controlInputValue(def, input), previousFeatures = null) {
-  captureActiveAllocationSnapshot(def.key, value, previousFeatures);
-  activeFeatures[def.key] = value;
-  restoreFromNoActiveAllocation(def.key, value);
-  applyCoherentSideEffects(def.key);
-  updateCoverageFields(def.key);
-  activeFeatures = deriveFeatureState(activeFeatures);
-  syncDerivedControlValues();
-}
-
-function captureActiveAllocationSnapshot(changedKey, value, previousFeatures) {
-  if (!NO_ACTIVE_ALLOCATION_KEYS.has(changedKey) || asNumber(value) > 0) return;
-  const source = previousFeatures || activeFeatures;
-  if (
-    asNumber(source.o2_max_concurrent_normalized_gpus) > 0 &&
-    asNumber(source.o2_allocation_duration_hours) > 0
-  ) {
-    lastActiveAllocationFeatures = clone(source);
-  }
-}
-
-function restoreFromNoActiveAllocation(changedKey, value) {
-  if (!NO_ACTIVE_ALLOCATION_KEYS.has(changedKey) || asNumber(value) <= 0) return;
-  const isPinnedAtZero =
-    asNumber(activeFeatures.o2_max_concurrent_normalized_gpus) <= 0 ||
-    asNumber(activeFeatures.o2_allocation_duration_hours) <= 0;
-  if (!isPinnedAtZero) return;
-
-  const source = lastActiveAllocationFeatures || activeRow?.features || {};
-  activeFeatures = { ...activeFeatures, ...clone(source) };
-  activeFeatures[changedKey] = value;
-  if (changedKey === "o2_allocation_duration_hours") {
-    activeFeatures.o2_max_concurrent_normalized_gpus = positiveControlValue(
-      "o2_max_concurrent_normalized_gpus",
-      source.o2_max_concurrent_normalized_gpus,
-      16
-    );
-  }
-  if (changedKey === "o2_max_concurrent_normalized_gpus") {
-    activeFeatures.o2_allocation_duration_hours = positiveControlValue(
-      "o2_allocation_duration_hours",
-      source.o2_allocation_duration_hours,
-      1
-    );
-  }
-  lastActiveAllocationFeatures = null;
-}
-
-function syncDerivedControlValues() {
-  for (const def of controlDefs) {
-    const input = dom.controlsRoot.querySelector(`[data-key="${def.key}"]`);
     const value = activeFeatures[def.key];
-    if (input) {
-      if (def.type === "checkbox") input.checked = asBool(value);
-      else input.value = value ?? "";
+    if (def.type === "select") {
+      ensureSelectOption(input, value);
+      input.value = value ?? "";
+    } else {
+      input.value = clampForControl(def, value);
     }
     updateControlValue(def);
   }
+}
+
+function clampForControl(def, value) {
+  if (def.type !== "range") return value ?? "";
+  return Math.min(asNumber(def.max), Math.max(asNumber(def.min), asNumber(value)));
 }
 
 function updateControlValue(def) {
@@ -607,136 +555,50 @@ function updateControlValue(def) {
   output.textContent = def.format ? def.format(value) : pretty(value);
 }
 
-function updateCoverageFields(changedKey) {
-  if (changedKey === "o14_min_critical_coverage") {
-    const coverage = asNumber(activeFeatures.o14_min_critical_coverage, 1);
-    setCriticalCoverageFields(coverage);
-  }
-  if (changedKey === "o4_missing_reason") {
-    const reason = activeFeatures.o4_missing_reason;
-    activeFeatures.o4_coverage_fraction = reason === "observed"
-      ? asNumber(activeFeatures.o14_min_critical_coverage, 1)
-      : 0.2;
-    if (reason === "observed") {
-      if (
-        asNumber(activeFeatures.o13_confidential_compute_mode_fraction) >= 0.75 &&
-        asNumber(activeFeatures.o14_gap_fraction_critical) >= 0.45 &&
-        asNumber(activeFeatures.o14_min_critical_coverage, 1) <= 0.35
-      ) {
-        activeFeatures.o13_confidential_compute_mode_fraction = 0;
-        activeFeatures.o14_gap_fraction_critical = 0.01;
-        activeFeatures.o14_min_critical_coverage = 0.98;
-        setCriticalCoverageFields(0.98);
-      }
-    }
-    if (reason === "collector_gap") {
-      activeFeatures.o14_gap_fraction_critical = Math.max(asNumber(activeFeatures.o14_gap_fraction_critical), 0.12);
-      activeFeatures.o14_min_critical_coverage = Math.min(asNumber(activeFeatures.o14_min_critical_coverage, 1), 0.8);
-      setCriticalCoverageFields(asNumber(activeFeatures.o14_min_critical_coverage, 1));
-      activeFeatures.o4_coverage_fraction = 0.2;
-    }
-    if (reason === "counter_disabled_by_cc_mode") {
-      activeFeatures.o13_confidential_compute_mode_fraction = Math.max(
-        asNumber(activeFeatures.o13_confidential_compute_mode_fraction),
-        0.75
-      );
-      activeFeatures.o14_gap_fraction_critical = Math.max(asNumber(activeFeatures.o14_gap_fraction_critical), 0.45);
-      activeFeatures.o14_min_critical_coverage = Math.min(asNumber(activeFeatures.o14_min_critical_coverage, 1), 0.35);
-      setCriticalCoverageFields(asNumber(activeFeatures.o14_min_critical_coverage, 1));
-      activeFeatures.o4_coverage_fraction = 0.2;
-    }
-  }
-}
-
-function setCriticalCoverageFields(coverageValue) {
-  const coverage = clamp(coverageValue);
-  activeFeatures.o1_coverage_fraction = coverage;
-  activeFeatures.o2_coverage_fraction = coverage;
-  activeFeatures.o4_coverage_fraction = activeFeatures.o4_missing_reason === "observed" ? coverage : Math.min(coverage, 0.2);
-  activeFeatures.o7_coverage_fraction = coverage;
-  activeFeatures.o8_coverage_fraction = coverage;
-  activeFeatures.o14_coverage_fraction = coverage;
-}
-
 function renderDashboard() {
   if (!activeRow) {
     renderEmptyState();
     return;
   }
-  const replay = replayResult(activeRow);
-  const display = currentDisplayResult(replay);
-  const result = display.result;
-  const features = display.features;
 
-  renderStateBanner(result, display);
-  dom.resetRow.disabled = false;
-  dom.resultMode.textContent = display.modeText;
-  dom.modeDetail.textContent = display.detailText;
+  const result = sandboxDirty ? scoreFeatures(activeFeatures, activeSite()) : replayResult(activeRow, activeSite());
+  const features = result.features;
+  renderStateBanner(result);
+
+  dom.resultMode.textContent = sandboxDirty ? "Catalog v2 rule sandbox" : "Catalog v2 generated datapoint";
+  dom.modeDetail.textContent = sandboxDirty
+    ? `Manual edits are scored by deterministic catalog rules. Source datapoint: ${sourceRowSummary(activeRow)}.`
+    : `Selected row was generated from the public v2 catalog. ${sourceRowSummary(activeRow)}.`;
   dom.resultLabel.textContent = `L${result.label}: ${labelName(result.label)}`;
   dom.resultLabel.style.color = labelColor(result.label);
+
   dom.riskFill.style.width = formatPercent(result.pLarge, 1);
   dom.riskFill.style.backgroundColor = labelColor(result.label);
   dom.pLarge.textContent = formatPercent(result.pLarge, 1);
+  if (dom.evasionFill) {
+    dom.evasionFill.style.width = formatPercent(result.evasionProbability, 1);
+    dom.evasionFill.style.backgroundColor = evasionColor(result.evasionLabel);
+  }
+  if (dom.pEvasion) dom.pEvasion.textContent = formatPercent(result.evasionProbability, 1);
+
   dom.severityScore.textContent = result.severity.toFixed(2);
   dom.negativeConfidence.textContent = formatPercent(result.negativeCertificationConfidence, 1);
   dom.integrityStatus.textContent = result.integrityWarning ? "Warning" : "Clear";
   dom.integrityStatus.style.color = result.integrityWarning ? "var(--integrity)" : "var(--ok)";
   dom.capacityStatus.textContent = result.capacityPossible ? "Possible" : "Below threshold";
   dom.capacityStatus.style.color = result.capacityPossible ? "var(--warn)" : "var(--ok)";
-  dom.policyRatio.textContent = `Policy ratio ${asNumber(features.policy_compute_ratio).toFixed(2)}`;
+  if (dom.evasionStatus) {
+    dom.evasionStatus.textContent = evasionName(result.evasionLabel);
+    dom.evasionStatus.style.color = evasionColor(result.evasionLabel);
+  }
 
+  dom.policyRatio.textContent = `Policy ratio ${policyRatio(features).toFixed(2)}`;
   renderProbabilityBars(result.probabilities);
   renderList(dom.evidenceList, result.topEvidence, false);
   renderList(dom.missingList, result.criticalMissingLayers.length ? result.criticalMissingLayers : ["none flagged"], true);
+  renderList(dom.evasionList, evasionItems(result), result.evasionRules.length > 0);
   updateHud(features);
-  scene.update(features, result);
-}
-
-function currentDisplayResult(replay) {
-  if (!sandboxDirty) {
-    return {
-      result: replay,
-      features: replay.features,
-      modeText: "calibrated model replay",
-      detailText: `Selected datapoint replays the trained model export. ${sourceRowSummary(activeRow)}.`,
-      bannerPrefix: `Source datapoint: ${sourceRowSummary(activeRow)}`,
-    };
-  }
-
-  if (liveInference.result && liveInference.revision === editRevision) {
-    return {
-      result: liveInference.result,
-      features: liveInference.result.features,
-      modeText: "live model inference",
-      detailText: `Edited controls scored by the live model. Source datapoint: ${sourceRowSummary(activeRow)}.`,
-      bannerPrefix: `Live score for ${sourceRowSummary(activeRow)}`,
-    };
-  }
-
-  if (inferenceApiUrl && !liveInference.error) {
-    const pendingResult = liveInference.result || replay;
-    return {
-      result: pendingResult,
-      features: deriveFeatureState(activeFeatures),
-      modeText: "live model pending",
-      detailText: `Waiting for the live model. Source datapoint: ${sourceRowSummary(activeRow)}.`,
-      bannerPrefix: `Updating live score for ${sourceRowSummary(activeRow)}`,
-    };
-  }
-
-  const fallback = scoreFeatures(activeFeatures);
-  const apiUnavailable = inferenceApiUrl && liveInference.error;
-  return {
-    result: fallback,
-    features: fallback.features,
-    modeText: apiUnavailable ? "rule fallback" : "offline rule sandbox",
-    detailText: apiUnavailable
-      ? `Live API unavailable; showing browser rule fallback. ${liveInference.error}`
-      : `No inference API URL configured; manual edits use browser rules. Source datapoint: ${sourceRowSummary(activeRow)}.`,
-    bannerPrefix: apiUnavailable
-      ? `Rule fallback after API error from ${sourceRowSummary(activeRow)}`
-      : `Offline rule sandbox from ${sourceRowSummary(activeRow)}`,
-  };
+  scene.update(features, result, activeSite());
 }
 
 function renderProbabilityBars(probabilities) {
@@ -761,20 +623,31 @@ function renderProbabilityBars(probabilities) {
 }
 
 function renderList(root, items, warnings) {
+  if (!root) return;
   root.innerHTML = "";
   for (const item of items) {
     const li = document.createElement("li");
     li.textContent = item;
-    if (warnings && item !== "none flagged") li.className = "warning";
+    if (warnings && item !== "none flagged" && item !== "no discrepancy rules triggered") li.className = "warning";
     root.append(li);
   }
 }
 
+function evasionItems(result) {
+  const rules = result.evasionRules?.length
+    ? result.evasionRules.map((rule) => pretty(rule.replace(/^discrepancy_/, "")))
+    : ["no discrepancy rules triggered"];
+  if (result.benignExplanations?.length) {
+    rules.push(`Check benign explanations: ${result.benignExplanations.join(", ")}`);
+  }
+  return rules;
+}
+
 function updateHud(features) {
-  dom.hudGpus.textContent = formatNumber(asNumber(features.o2_max_concurrent_normalized_gpus), 0);
+  dom.hudGpus.textContent = formatNumber(asNumber(features.o2_allocated_accelerator_count), 0);
   dom.hudFabric.textContent = formatPercent(fabricSignal(features), 0);
-  dom.hudPower.textContent = formatPercent(asNumber(features.o8_rack_power_fraction_p95), 0);
-  dom.hudCoverage.textContent = formatPercent(asNumber(features.o14_min_critical_coverage, 1), 0);
+  dom.hudPower.textContent = formatPercent(powerSignal(features, activeSite()), 0);
+  dom.hudCoverage.textContent = formatPercent(asNumber(features.o14_telemetry_coverage_fraction_by_layer, 1), 0);
 }
 
 function updateHudEmpty() {
@@ -789,47 +662,34 @@ function renderEmptyState() {
   dom.stateBanner.textContent = "";
   dom.stateBanner.className = "state-banner";
   dom.resultMode.textContent = "No matching datapoint";
-  dom.modeDetail.textContent = `No synthetic row exists for ${filterSummary()}. Evidence inputs are disabled and are not being scored.`;
+  dom.modeDetail.textContent = `No synthetic row exists for ${filterSummary()}. Evidence inputs are disabled.`;
   dom.resultLabel.textContent = "No matching datapoint";
   dom.resultLabel.style.color = "var(--muted)";
   dom.riskFill.style.width = "0%";
-  dom.riskFill.style.backgroundColor = "var(--muted)";
   dom.pLarge.textContent = "n/a";
+  if (dom.evasionFill) dom.evasionFill.style.width = "0%";
+  if (dom.pEvasion) dom.pEvasion.textContent = "n/a";
   dom.severityScore.textContent = "n/a";
   dom.negativeConfidence.textContent = "n/a";
   dom.integrityStatus.textContent = "n/a";
-  dom.integrityStatus.style.color = "var(--muted)";
   dom.capacityStatus.textContent = "n/a";
-  dom.capacityStatus.style.color = "var(--muted)";
+  if (dom.evasionStatus) dom.evasionStatus.textContent = "n/a";
   dom.policyRatio.textContent = "Policy ratio n/a";
   dom.probabilityBars.innerHTML = "";
-  const emptyProbabilities = document.createElement("p");
-  emptyProbabilities.className = "empty-panel-text";
-  emptyProbabilities.textContent = "No label probabilities without a matching datapoint.";
-  dom.probabilityBars.append(emptyProbabilities);
   renderList(dom.evidenceList, ["no datapoint selected"], false);
   renderList(dom.missingList, ["no datapoint selected"], true);
+  renderList(dom.evasionList, ["no datapoint selected"], true);
   updateHudEmpty();
-  scene.update(features, {
-    label: 0,
-    integrityWarning: false,
-  });
+  if (scene) scene.update(features, { label: 0, evasionProbability: 0, integrityWarning: false }, activeSite());
 }
 
-function renderStateBanner(result, display = {}) {
-  if (!activeRow) {
-    dom.stateBanner.textContent = "";
-    dom.stateBanner.className = "state-banner";
-    return;
-  }
+function renderStateBanner(result) {
   const warnings = result.consistencyWarnings || [];
   dom.stateBanner.className = warnings.length ? "state-banner warning" : "state-banner";
   if (sandboxDirty) {
-    const parts = [display.bannerPrefix || `Edited sandbox from ${sourceRowSummary(activeRow)}`];
-    if (warnings.length) {
-      parts.push(`Please check: ${warnings.join("; ")}`);
-    }
-    dom.stateBanner.textContent = parts.join(". ");
+    dom.stateBanner.textContent = warnings.length
+      ? `Edited sandbox from ${sourceRowSummary(activeRow)}. Check: ${warnings.slice(0, 4).join("; ")}.`
+      : `Edited sandbox from ${sourceRowSummary(activeRow)}.`;
   } else {
     dom.stateBanner.textContent = `Source datapoint: ${sourceRowSummary(activeRow)}`;
   }
@@ -837,444 +697,38 @@ function renderStateBanner(result, display = {}) {
 
 function renderContextStatus(rows = filteredRows()) {
   if (!dom.contextStatus || !dataset) return;
-  const site = dom.siteSelect.value;
-  const scenario = dom.scenarioSelect.value;
   const parts = [];
-  if (site !== "all") {
-    const siteMeta = dataset.sites.find((item) => item.site_id === site);
-    if (siteMeta) {
+  if (dom.siteSelect.value !== "all") {
+    const site = dataset.sites.find((item) => item.site_id === dom.siteSelect.value);
+    if (site) {
       parts.push(
-        `${site}: ${pretty(siteMeta.site_type)}, ${formatNumber(siteMeta.normalized_h100e_capacity)} H100e, largest domain ${formatNumber(siteMeta.largest_contiguous_domain_gpus)}`
+        `${site.name}: ${pretty(site.operator_type)}, ${formatNumber(site.normalized_training_compute_capacity)} accelerators, ${pretty(site.trust_tier)} trust`
       );
     }
   }
-  if (scenario !== "all") {
-    parts.push(`${scenarioOptionLabelFromKey(scenario)}: ${labelDistributionText(labelCounts(rows))}`);
+  if (dom.scenarioSelect.value !== "all") {
+    parts.push(`${scenarioOptionLabel(dom.scenarioSelect.value)} selected`);
   }
   if (!parts.length) {
-    parts.push("Filters select existing synthetic datapoints; evidence edits use live inference when configured, otherwise the rule sandbox.");
+    parts.push("Filters select synthetic datapoints; manual edits use the catalog v2 deterministic evaluator.");
   }
   dom.contextStatus.textContent = `${parts.join(" | ")} | ${formatNumber(rows.length)} matching rows`;
 }
 
-function updateApiStatus(state, detail = "") {
-  if (!dom.apiStatus) return;
-  const labels = {
-    "not-configured": "API: not configured",
-    configured: "API: configured",
-    pending: "API: checking",
-    available: "API: available",
-    unavailable: "API: unavailable; rule fallback",
-  };
-  dom.apiStatus.textContent = detail || labels[state] || "API: unknown";
-  dom.apiStatus.className = `api-status api-${state}`;
-}
-
-function clearLiveInference() {
-  if (liveInference.timer) {
-    clearTimeout(liveInference.timer);
-  }
-  if (liveInference.controller) {
-    liveInference.controller.abort();
-  }
-  liveInference = {
-    timer: null,
-    controller: null,
-    pending: false,
-    revision: editRevision,
-    result: null,
-    error: "",
-  };
-  updateApiStatus(inferenceApiUrl ? "configured" : "not-configured");
-}
-
-function scheduleLiveInference() {
-  if (liveInference.timer) {
-    clearTimeout(liveInference.timer);
-  }
-  if (liveInference.controller) {
-    liveInference.controller.abort();
-  }
-  liveInference.error = "";
-  liveInference.revision = editRevision;
-
-  if (!inferenceApiUrl) {
-    liveInference.pending = false;
-    updateApiStatus("not-configured");
-    return;
-  }
-
-  liveInference.pending = true;
-  updateApiStatus("pending");
-  const revision = editRevision;
-  liveInference.timer = setTimeout(() => {
-    requestLiveInference(revision);
-  }, LIVE_INFERENCE_DEBOUNCE_MS);
-}
-
-async function requestLiveInference(revision) {
-  if (!activeRow || !inferenceApiUrl || revision !== editRevision) return;
-  const controller = new AbortController();
-  liveInference.controller = controller;
-  const timeout = setTimeout(() => controller.abort(), LIVE_INFERENCE_TIMEOUT_MS);
-  try {
-    const response = await fetch(`${inferenceApiUrl}/predict`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(liveInferencePayload()),
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const payload = await response.json();
-    if (revision !== editRevision) return;
-    liveInference.pending = false;
-    liveInference.error = "";
-    liveInference.result = resultFromApi(payload);
-    liveInference.revision = revision;
-    updateApiStatus("available");
-    renderDashboard();
-  } catch (error) {
-    if (revision !== editRevision) return;
-    liveInference.pending = false;
-    liveInference.result = null;
-    liveInference.error = error?.name === "AbortError" ? "Request timed out or was cancelled." : String(error?.message || error);
-    updateApiStatus("unavailable");
-    renderDashboard();
-  } finally {
-    clearTimeout(timeout);
-    if (liveInference.controller === controller) {
-      liveInference.controller = null;
-    }
-  }
-}
-
-function liveInferencePayload() {
-  return {
-    feature_row_id: activeRow?.feature_row_id || null,
-    features: liveInferenceFeatures(),
-    context: {
-      scope_type: activeRow?.scope_type || activeFeatures.scope_type || "topology_domain",
-      window_length_seconds: activeRow?.window_length_seconds || activeFeatures.window_length_seconds || 3600,
-    },
-    derive: true,
-    return_completed_features: true,
-  };
-}
-
-function liveInferenceFeatures() {
-  const features = clone(activeFeatures);
-  for (const key of KNOWN_METADATA_ONLY_FEATURES) {
-    delete features[key];
-  }
-  return features;
-}
-
-function resultFromApi(payload) {
-  const probabilities = Array.isArray(payload.probabilities)
-    ? payload.probabilities.map((value) => clamp(value))
-    : [0, 0, 0, 0, 0].map((_, label) => clamp(payload.probability_by_label?.[String(label)]));
-  const label = Number(payload.predicted_label);
-  const completed = payload.completed_features && typeof payload.completed_features === "object"
-    ? payload.completed_features
-    : {};
-  return {
-    mode: "Live model inference",
-    label,
-    labelName: labelName(label),
-    probabilities,
-    pLarge: asNumber(payload.p_large_training),
-    severity: asNumber(payload.severity_score),
-    negativeCertificationConfidence: asNumber(payload.negative_certification_confidence),
-    capacityPossible: asBool(payload.capacity_possible),
-    integrityWarning: asBool(payload.integrity_warning),
-    criticalMissingLayers: asStringArray(payload.critical_missing_layers),
-    topEvidence: asStringArray(payload.top_evidence),
-    consistencyWarnings: userFacingApiWarnings(payload.input_warnings),
-    features: displayFeaturesFromApi(completed),
-  };
-}
-
-function displayFeaturesFromApi(completed) {
-  const features = { ...activeFeatures, ...completed };
-  for (const def of controlDefs) {
-    if (Object.prototype.hasOwnProperty.call(activeFeatures, def.key)) {
-      features[def.key] = activeFeatures[def.key];
-    }
-  }
-  return deriveFeatureState(features);
-}
-
-function userFacingApiWarnings(value) {
-  return asStringArray(value).flatMap((warning) => {
-    const lower = warning.toLowerCase();
-    if (lower.startsWith("derived fields updated from edited inputs:")) return [];
-    if (lower.includes("metadata-only and was not sent to the model")) return [];
-    for (const key of KNOWN_METADATA_ONLY_FEATURES) {
-      if (lower.includes("kept only as metadata") && lower.includes(key)) return [];
-    }
-    return [plainWarningText(warning)];
-  });
-}
-
-function plainWarningText(warning) {
-  const lower = warning.toLowerCase();
-  if (lower === "allocated gpus exceed monitored h100e capacity") {
-    return "The allocated GPU count is higher than this site's monitored GPU capacity. Lower allocated GPUs or choose a higher-capacity site.";
-  }
-  if (lower === "fabric footprint exceeds monitored h100e capacity") {
-    return "The network fabric size is higher than this site's monitored GPU capacity. Lower fabric footprint or choose a higher-capacity site.";
-  }
-  if (lower === "fabric footprint exceeds allocated gpus") {
-    return "The network fabric size is higher than the allocated GPU count. Lower fabric footprint or raise allocated GPUs.";
-  }
-  if (lower.startsWith("feature_row_id not found in base lookup:")) {
-    return "The selected datapoint was not found in the live API reference table. Live scoring may be less reliable because many model inputs may be missing.";
-  }
-  if (lower.includes("field is not a model feature and was kept only as metadata:")) {
-    return `The live API ignored an unrecognized input field: ${warning.split(":").pop().trim()}`;
-  }
-  if (lower.startsWith("no base row supplied;")) {
-    return "The live API is missing many model inputs. Choose a sampled datapoint before editing controls for a more reliable live score.";
-  }
-  return warning;
-}
-
-function asStringArray(value) {
-  if (Array.isArray(value)) return value.map((item) => String(item)).filter(Boolean);
-  if (!value) return [];
-  return String(value)
-    .split(";")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function updateFilterStatus(totalRows, shownRows) {
-  if (!dom.filterStatus) return;
-  if (totalRows === 0) {
-    dom.filterStatus.textContent = `No datapoints match ${filterSummary()}. The scenario filter does not create new datapoints.`;
-  } else if (totalRows > shownRows) {
-    dom.filterStatus.textContent = `Showing first ${formatNumber(shownRows)} of ${formatNumber(totalRows)} matching datapoints.`;
-  } else {
-    dom.filterStatus.textContent = `${formatNumber(totalRows)} matching datapoints.`;
-  }
+function updateFilterStatus(total, shown) {
+  dom.filterStatus.textContent = total > shown
+    ? `Showing first ${formatNumber(shown)} of ${formatNumber(total)} matching rows`
+    : `${formatNumber(total)} matching rows`;
 }
 
 function setControlsDisabled(disabled) {
-  dom.controlsRoot.querySelectorAll("input, select").forEach((input) => {
+  dom.controlsRoot?.querySelectorAll("input, select").forEach((input) => {
     input.disabled = disabled;
   });
 }
 
-function applyCoherentSideEffects(changedKey) {
-  if (changedKey === "o1_normalized_h100e_capacity") {
-    const capacity = Math.max(0, asNumber(activeFeatures.o1_normalized_h100e_capacity));
-    const partitioned = clamp(asNumber(activeFeatures.o1_non_partitioned_fraction, 1), 0.1, 1);
-    activeFeatures.o1_largest_contiguous_domain_gpus = Math.round(capacity * partitioned);
-  }
-
-  if (changedKey === "o2_max_concurrent_normalized_gpus") {
-    const allocation = Math.max(0, asNumber(activeFeatures.o2_max_concurrent_normalized_gpus));
-    activeFeatures.o10_world_size = Math.round(allocation);
-    activeFeatures.o10_same_image_gpu_count = Math.round(allocation);
-    activeFeatures.o7_synchronized_fabric_footprint = Math.min(
-      asNumber(activeFeatures.o7_synchronized_fabric_footprint),
-      allocation
-    );
-    if (allocation < 1) {
-      activeFeatures.o4_gpu_util_p95 = 0;
-      activeFeatures.o4_gpu_util_duty_gt_70 = 0;
-      activeFeatures.o4_gpu_util_p50 = 0;
-      activeFeatures.o4_sm_tensor_active_p95 = 0;
-      activeFeatures.o4_hbm_bandwidth_active_p95 = 0;
-      activeFeatures.o4_hbm_used_fraction_p50 = 0;
-      activeFeatures.o7_synchronized_fabric_footprint = 0;
-      activeFeatures.o7_collective_periodicity_score = 0;
-      activeFeatures.o7_scaleout_port_util_p95 = 0;
-      activeFeatures.o11_checkpoint_periodicity_score = 0;
-      activeFeatures.o11_checkpoint_write_tb_per_event = 0;
-      activeFeatures.o11_read_write_training_pattern_score = 0;
-      activeFeatures.o8_rack_power_fraction_p95 = Math.min(asNumber(activeFeatures.o8_rack_power_fraction_p95), 0.25);
-    }
-  }
-
-  if (changedKey === "o4_gpu_util_p95") {
-    const util = clamp(asNumber(activeFeatures.o4_gpu_util_p95) / 100);
-    activeFeatures.o4_gpu_util_duty_gt_70 = util >= 0.7
-      ? Math.max(asNumber(activeFeatures.o4_gpu_util_duty_gt_70), 0.5)
-      : Math.min(asNumber(activeFeatures.o4_gpu_util_duty_gt_70), util / 1.4);
-    if (util < 0.3) {
-      activeFeatures.o4_gpu_util_p50 = Math.min(asNumber(activeFeatures.o4_gpu_util_p50), util * 100);
-      activeFeatures.o4_sm_tensor_active_p95 = Math.min(asNumber(activeFeatures.o4_sm_tensor_active_p95), util * 60);
-      activeFeatures.o4_hbm_bandwidth_active_p95 = Math.min(asNumber(activeFeatures.o4_hbm_bandwidth_active_p95), util);
-    }
-  }
-
-  if (changedKey === "o7_synchronized_fabric_footprint" || changedKey === "o7_collective_periodicity_score") {
-    const capacity = Math.max(1, asNumber(activeFeatures.o1_normalized_h100e_capacity, 1));
-    const footprint = Math.max(0, asNumber(activeFeatures.o7_synchronized_fabric_footprint));
-    const periodicity = clamp(asNumber(activeFeatures.o7_collective_periodicity_score));
-    if (changedKey === "o7_synchronized_fabric_footprint" && footprint < 64) {
-      activeFeatures.o7_collective_periodicity_score = Math.min(periodicity, footprint / capacity);
-      activeFeatures.o7_scaleout_port_util_p95 = Math.min(asNumber(activeFeatures.o7_scaleout_port_util_p95), footprint / capacity);
-    }
-    if (changedKey === "o7_collective_periodicity_score" && periodicity < 0.2) {
-      activeFeatures.o7_synchronized_fabric_footprint = Math.min(footprint, Math.round(capacity * periodicity));
-      activeFeatures.o7_scaleout_port_util_p95 = Math.min(asNumber(activeFeatures.o7_scaleout_port_util_p95), periodicity + 0.05);
-    }
-  }
-
-  if (changedKey === "o8_rack_power_fraction_p95") {
-    const power = clamp(asNumber(activeFeatures.o8_rack_power_fraction_p95));
-    activeFeatures.o4_gpu_power_fraction_p95 = Math.min(asNumber(activeFeatures.o4_gpu_power_fraction_p95), Math.max(power, 0.18));
-    activeFeatures.o9_cooling_flow_duty = Math.min(asNumber(activeFeatures.o9_cooling_flow_duty), Math.max(power, 0.12));
-  }
-
-  if (changedKey === "o11_checkpoint_periodicity_score") {
-    const checkpoint = clamp(asNumber(activeFeatures.o11_checkpoint_periodicity_score));
-    if (checkpoint < 0.1) {
-      activeFeatures.o11_checkpoint_write_tb_per_event = 0;
-      activeFeatures.o11_read_write_training_pattern_score = 0;
-    }
-  }
-}
-
-function fabricSignal(features) {
-  const capacity = Math.max(1, asNumber(features.o1_normalized_h100e_capacity, 1));
-  return Math.max(
-    clamp(asNumber(features.o7_collective_periodicity_score)),
-    clamp(asNumber(features.o7_synchronized_fabric_footprint) / capacity)
-  );
-}
-
-function emptyFeatureState() {
-  return deriveFeatureState({
-    o1_normalized_h100e_capacity: 1,
-    o1_largest_contiguous_domain_gpus: 0,
-    o1_non_partitioned_fraction: 1,
-    o2_max_concurrent_normalized_gpus: 0,
-    o2_allocation_duration_hours: 0,
-    o4_gpu_util_p95: 0,
-    o4_sm_tensor_active_p95: 0,
-    o4_missing_reason: "observed",
-    o7_synchronized_fabric_footprint: 0,
-    o7_collective_periodicity_score: 0,
-    o8_rack_power_fraction_p95: 0,
-    o11_checkpoint_periodicity_score: 0,
-    o12_signed_ml_logs_present: false,
-    o13_confidential_compute_mode_fraction: 0,
-    o14_min_critical_coverage: 1,
-    o14_gap_fraction_critical: 0,
-    capacity_possible: false,
-  });
-}
-
-function siteOptionLabel(site) {
-  return `${site.site_id} - ${pretty(site.site_type)}, ${formatNumber(site.normalized_h100e_capacity)} H100e`;
-}
-
-function scenarioOptionsFromRows(rows) {
-  const byKey = new Map();
-  for (const row of rows) {
-    const key = scenarioKey(row);
-    let item = byKey.get(key);
-    if (!item) {
-      item = {
-        key,
-        family: scenarioFamily(row),
-        variant: scenarioVariant(row),
-        label_distribution: {},
-      };
-      byKey.set(key, item);
-    }
-    const label = String(row.predicted_label);
-    item.label_distribution[label] = (item.label_distribution[label] || 0) + 1;
-  }
-  return [...byKey.values()].sort((left, right) => {
-    const family = pretty(left.family).localeCompare(pretty(right.family));
-    if (family !== 0) return family;
-    return pretty(left.variant).localeCompare(pretty(right.variant));
-  });
-}
-
-function scenarioOptionLabel(item) {
-  const label = scenarioDisplayParts(item.family, item.variant);
-  const distribution = labelDistributionText(item.label_distribution);
-  return distribution ? `${label} - ${distribution}` : label;
-}
-
-function scenarioOptionLabelFromKey(key) {
-  const [family, variant = ""] = splitScenarioKey(key);
-  return scenarioDisplayParts(family, variant);
-}
-
-function rowOptionLabel(row) {
-  const predicted = Number(row.predicted_label);
-  const truth = Number(row.label_0_to_4);
-  const label = predicted === truth ? `model L${predicted}` : `truth L${truth}, model L${predicted}`;
-  return `${row.site_id} | ${scenarioDisplay(row)} | ${label} | ${WINDOW_LABELS.get(row.window_length_seconds)}`;
-}
-
-function sourceRowSummary(row) {
-  if (!row) return "none";
-  const predicted = Number(row.predicted_label);
-  const truth = Number(row.label_0_to_4);
-  const label = predicted === truth ? `model L${predicted}` : `truth L${truth}, model L${predicted}`;
-  return `${row.site_id} / ${scenarioDisplay(row)} / ${WINDOW_LABELS.get(row.window_length_seconds)} / ${label}`;
-}
-
-function scenarioKey(row) {
-  return [scenarioFamily(row), scenarioVariant(row)].map(encodeURIComponent).join("::");
-}
-
-function scenarioFamily(row) {
-  return row.scenario_family || row.latent_workload_class || "unknown";
-}
-
-function scenarioVariant(row) {
-  return row.scenario_variant || "";
-}
-
-function splitScenarioKey(key) {
-  const [family = "unknown", variant = ""] = String(key || "").split("::").map(decodeURIComponent);
-  return [family, variant];
-}
-
-function scenarioDisplay(row) {
-  return scenarioDisplayParts(scenarioFamily(row), scenarioVariant(row));
-}
-
-function scenarioDisplayParts(family, variant) {
-  const familyLabel = pretty(family);
-  return variant ? `${familyLabel} (${pretty(variant)})` : familyLabel;
-}
-
-function labelCounts(rows) {
-  return rows.reduce((counts, row) => {
-    const label = String(row.predicted_label);
-    counts[label] = (counts[label] || 0) + 1;
-    return counts;
-  }, {});
-}
-
-function labelDistributionText(distribution = {}) {
-  return Object.entries(distribution)
-    .sort(([a], [b]) => Number(a) - Number(b))
-    .map(([label, count]) => `L${label} ${formatNumber(count)}`)
-    .join(", ");
-}
-
-function filterSummary() {
-  const site = dom.siteSelect.value === "all" ? "all sites" : dom.siteSelect.value;
-  const scenario = dom.scenarioSelect.value === "all" ? "all scenario variants" : scenarioOptionLabelFromKey(dom.scenarioSelect.value);
-  const windowLength = dom.windowSelect.value === "all"
-    ? "all windows"
-    : WINDOW_LABELS.get(Number(dom.windowSelect.value)) || `${dom.windowSelect.value}s`;
-  return `${site}, ${scenario}, ${windowLength}`;
-}
-
 function setOptions(select, options) {
+  const previous = select.value;
   select.innerHTML = "";
   for (const [value, label] of options) {
     const option = document.createElement("option");
@@ -1282,15 +736,97 @@ function setOptions(select, options) {
     option.textContent = label;
     select.append(option);
   }
+  if (options.some(([value]) => String(value) === String(previous))) {
+    select.value = previous;
+  }
 }
 
-function pretty(value) {
-  if (value == null || value === "") return "none";
-  return String(value).replaceAll("_", " ");
+function ensureSelectOption(select, value) {
+  if (value == null || [...select.options].some((option) => option.value === String(value))) return;
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = pretty(value);
+  select.append(option);
+}
+
+function siteOptionLabel(site) {
+  return `${site.name} (${formatNumber(site.normalized_training_compute_capacity)} accel, ${pretty(site.operator_type)})`;
+}
+
+function scenarioOptionLabel(key) {
+  const summary = dataset.scenarios?.find((item) => item.scenario === key);
+  const base = pretty(key);
+  if (!summary) return base;
+  const flags = [];
+  if (summary.training_positive_rows) flags.push("training");
+  if (summary.evasion_positive_rows) flags.push("evasion");
+  return `${base} (${formatNumber(summary.rows)} rows${flags.length ? `, ${flags.join("+")}` : ""})`;
+}
+
+function rowOptionLabel(row) {
+  return `${row.feature_row_id} | L${row.training_label} ${formatPercent(row.training_probability, 0)} | ${evasionName(row.evasion_label)} ${formatPercent(row.evasion_probability, 0)}`;
+}
+
+function sourceRowSummary(row) {
+  const site = dataset.sites.find((item) => item.site_id === row.site_id);
+  return `${site?.name || row.site_id}, ${pretty(row.scenario_family)}, ${WINDOW_LABELS.get(row.window_length_seconds) || `${row.window_length_seconds}s`}`;
+}
+
+function activeSite(row = activeRow) {
+  const siteId = row?.site_id || dom.siteSelect?.value;
+  return dataset?.sites?.find((site) => site.site_id === siteId) || null;
+}
+
+function policyRatio(features) {
+  return asNumber(features.o2_allocated_compute_hours) / POLICY_GPU_HOURS;
+}
+
+function fabricSignal(features) {
+  const capacity = Math.max(1, asNumber(features.o1_normalized_training_compute_capacity, 1));
+  return Math.max(
+    clamp(asNumber(features.o7_synchronized_fabric_footprint) / capacity),
+    cadenceScore(features.o7_collective_periodicity_step_cadence) * 0.85,
+    clamp(asNumber(features.o7_scaleout_port_utilization) / 100)
+  );
+}
+
+function powerSignal(features, site) {
+  const designKw = Math.max(1, asNumber(site?.rack_power_design_kw, Math.max(1000, asNumber(features.o8_rack_it_power_kw))));
+  return clamp(asNumber(features.o8_rack_it_power_kw) / designKw);
 }
 
 function shortLabel(label) {
-  return ["No run", "Possible", "Elevated", "Likely", "Highest"][label] || "Unknown";
+  return ["None", "Possible", "Elevated", "Likely", "Definite"][label] || "Unknown";
+}
+
+function filterSummary() {
+  const site = dom.siteSelect.value === "all" ? "all sites" : pretty(dom.siteSelect.value);
+  const scenario = dom.scenarioSelect.value === "all" ? "all scenarios" : pretty(dom.scenarioSelect.value);
+  const windowLength = dom.windowSelect.value === "all" ? "all windows" : WINDOW_LABELS.get(Number(dom.windowSelect.value));
+  return `${site}, ${scenario}, ${windowLength}`;
+}
+
+function pretty(value) {
+  return String(value ?? "unknown")
+    .replace(/^o\d+_/, "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function emptyFeatureState() {
+  return deriveFeatureState({
+    o1_normalized_training_compute_capacity: 1,
+    o1_largest_low_latency_topology_footprint: 1,
+    o1_partitioning_fraction: 0,
+    o2_allocated_accelerator_count: 0,
+    o2_allocation_duration: 0,
+    o4_gpu_busy_percent: 0,
+    o7_synchronized_fabric_footprint: 0,
+    o7_collective_periodicity_step_cadence: 0,
+    o8_rack_it_power_kw: 0,
+    o14_telemetry_coverage_fraction_by_layer: 1,
+    o14_telemetry_gap_fraction_missed_scrapes: 0,
+  });
 }
 
 function clone(value) {

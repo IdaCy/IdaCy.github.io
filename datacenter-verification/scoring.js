@@ -1,4 +1,5 @@
-const LABEL_NAMES = [
+(function () {
+const TRAINING_LABEL_NAMES = [
   "No training likely",
   "Training possible",
   "Elevated training probability",
@@ -6,32 +7,43 @@ const LABEL_NAMES = [
   "Highest warning / definite",
 ];
 
-const FALSE_POSITIVE_RUNTIME_MARKERS = [
-  "inference",
-  "hpc",
-  "mpi",
-  "nccl",
-  "benchmark",
-  "burn_in",
-  "storage",
-  "etl",
-  "synthetic_data",
-];
+const EVASION_LABEL_NAMES = {
+  clear: "Clear",
+  watch: "Watch",
+  suspicious: "Suspicious",
+  likely: "Likely",
+};
 
-const FALSE_POSITIVE_DECLARED_CLASSES = new Set([
-  "inference",
-  "hpc",
-  "benchmark",
-  "burn_in",
-  "data",
-  "reserved",
-  "none",
-]);
+const TRAINING_RUNTIME_MARKERS = ["pytorch", "jax", "tensorflow", "deepspeed", "megatron"];
+const FALSE_POSITIVE_RUNTIME_MARKERS = ["mpi", "vllm", "tensorrt", "etl", "burn", "nccl"];
+const FALSE_POSITIVE_DECLARED_CLASSES = new Set(["hpc", "inference", "benchmark", "data", "reserved"]);
+const POLICY_GPU_HOURS = 512 * 24;
+
+const BENIGN_EXPLANATIONS = {
+  discrepancy_allocation_zero_but_activity_high: ["scheduler blind spot", "mapping error", "manual workload"],
+  discrepancy_power_high_visible_telemetry_low: ["non-GPU load", "meter mapping error", "baseline drift"],
+  discrepancy_fabric_high_scheduler_low: ["HPC/MPI", "NCCL benchmark", "missing job-port mapping"],
+  discrepancy_cloud_scheduler_mismatch: ["unused reservation", "billing delay", "account aggregation mismatch"],
+  discrepancy_counts_exceed_capacity: ["wrong denominator", "federation", "stale inventory"],
+  discrepancy_critical_telemetry_gap_during_candidate_window: ["planned maintenance", "collector upgrade", "network outage"],
+  discrepancy_counter_reset_or_config_change_near_activity: ["planned restart", "firmware update", "counter wrap"],
+  discrepancy_confidential_compute_unexplained_counter_absence: ["security policy", "driver issue", "permission change"],
+  discrepancy_semantic_declaration_conflicts_with_activity: ["wrong class", "mixed workload", "benchmark"],
+  discrepancy_checkpoint_without_training_context: ["backup", "replication", "ETL"],
+  discrepancy_external_capacity_conflict: ["public estimate error", "uncommissioned capacity", "non-AI load"],
+  discrepancy_active_probe_hidden_load: ["background load", "power cap", "thermal throttle"],
+  discrepancy_physical_or_firmware_change_near_gap: ["approved maintenance", "RMA", "scheduled firmware update"],
+};
 
 function clamp(value, min = 0, max = 1) {
   const number = Number(value);
   if (!Number.isFinite(number)) return min;
   return Math.min(max, Math.max(min, number));
+}
+
+function ramp(value, low, high) {
+  if (high <= low) return 0;
+  return clamp((asNumber(value) - low) / (high - low));
 }
 
 function asNumber(value, fallback = 0) {
@@ -45,12 +57,30 @@ function asBool(value) {
   return ["true", "t", "1", "yes", "y"].includes(String(value).toLowerCase());
 }
 
+function isOneOf(value, markers) {
+  const lower = String(value || "").toLowerCase();
+  return markers.some((marker) => lower.includes(marker));
+}
+
 function labelName(label) {
-  return LABEL_NAMES[label] || "Unknown";
+  return TRAINING_LABEL_NAMES[label] || "Unknown";
 }
 
 function labelColor(label) {
   return ["#217a57", "#6b7a31", "#bf7a16", "#c85f23", "#bd3d3a"][label] || "#64706b";
+}
+
+function evasionName(label) {
+  return EVASION_LABEL_NAMES[label] || "Unknown";
+}
+
+function evasionColor(label) {
+  return {
+    clear: "#217a57",
+    watch: "#6b7a31",
+    suspicious: "#bf7a16",
+    likely: "#bd3d3a",
+  }[label] || "#64706b";
 }
 
 function formatPercent(value, digits = 0) {
@@ -65,490 +95,388 @@ function formatNumber(value, digits = 0) {
   }).format(number);
 }
 
-function hasNonPositiveFeature(features, key) {
-  if (!Object.prototype.hasOwnProperty.call(features, key)) return false;
-  const number = Number(features[key]);
-  return Number.isFinite(number) && number <= 0;
+function formatBytes(value) {
+  const number = Math.max(0, asNumber(value));
+  if (number >= 1e12) return `${formatNumber(number / 1e12, 2)} TB`;
+  if (number >= 1e9) return `${formatNumber(number / 1e9, 1)} GB`;
+  if (number >= 1e6) return `${formatNumber(number / 1e6, 1)} MB`;
+  return `${formatNumber(number, 0)} B`;
 }
 
-function clearActiveWorkloadEvidence(out) {
-  Object.assign(out, {
-    policy_compute_ratio: 0,
-    o2_max_concurrent_normalized_gpus: 0,
-    o2_allocation_duration_hours: 0,
-    o2_gpu_hours_policy_ratio: 0,
-    o2_concurrency_fraction_domain: 0,
-    o2_declared_workload_class: "none",
-    o2_reservation_exclusive_flag: false,
-    o2_elastic_resize_count: 0,
-    o2_preemption_restart_count: 0,
-    o2_scheduler_queue_delay_hours: 0,
-    o2_job_array_width: 0,
-    o2_reservation_reuse_count: 0,
-    o3_batch_provisioned_gpus: 0,
-    o3_capacity_reservation_duration_hours: 0,
-    o3_training_sku_fraction: 0,
-    o3_billing_continuity_score: 0,
-    o3_egress_tb: 0,
-    o4_gpu_util_p50: 0,
-    o4_gpu_util_p95: 0,
-    o4_gpu_util_duty_gt_70: 0,
-    o4_sm_tensor_active_p95: 0,
-    o4_hbm_used_fraction_p50: 0,
-    o4_hbm_bandwidth_active_p95: 0,
-    o4_gpu_power_fraction_p95: 0,
-    o4_error_spike_score: 0,
-    o4_gpu_util_cv: 0,
-    o4_gpu_idle_gap_p95_minutes: 60,
-    o4_hbm_pressure_duration_fraction: 0,
-    o4_power_cap_active_fraction: 0,
-    o4_thermal_throttle_fraction: 0,
-    o5_kernel_training_motif_score: 0,
-    o5_tensor_throughput_ratio: 0,
-    o5_profiler_available: false,
-    o6_nvlink_util_p95: 0,
-    o6_nvlink_periodicity_score: 0,
-    o6_link_error_spike_score: 0,
-    o7_scaleout_port_util_p95: 0,
-    o7_synchronized_fabric_footprint: 0,
-    o7_collective_periodicity_score: 0,
-    o7_burst_duty_cycle: 0,
-    o7_rdma_congestion_score: 0,
-    o7_job_to_port_mapping_coverage: 0,
-    o7_flow_entropy_score: 0,
-    o7_cross_section_sync_score: 0,
-    o7_collective_jitter_score: 0,
-    o7_storage_traffic_fraction: 0,
-    o7_inference_fanout_score: 0,
-    o7_account_flow_linkage_confidence: 0,
-    o8_rack_power_fraction_p95: Math.min(asNumber(out.o8_rack_power_fraction_p95), 0.15),
-    o8_baseline_subtracted_energy_kwh: 0,
-    o8_power_cv: 0,
-    o8_power_to_gpu_residual: 0,
-    o8_power_baseline_drift_score: 0,
-    o8_power_cap_or_curtailment_active: false,
-    o8_unattributed_power_fraction: 0,
-    o9_gpu_hbm_temp_score: 0,
-    o9_thermal_delta_t_score: 0,
-    o9_cooling_flow_duty: 0,
-    o9_cooling_maintenance_active: false,
-    o9_thermal_throttle_support_score: 0,
-    o10_world_size: 0,
-    o10_runtime_framework_class: "none",
-    o10_rank_stability_score: 0,
-    o10_same_image_gpu_count: 0,
-    o10_rendezvous_present: false,
-    o10_runtime_metadata_confidence: 1,
-    o10_declared_vs_observed_mismatch_score: 0,
-    o11_data_staging_tb: 0,
-    o11_checkpoint_write_tb_per_event: 0,
-    o11_checkpoint_periodicity_score: 0,
-    o11_read_write_training_pattern_score: 0,
-    o11_checkpoint_jitter_score: 0,
-    o11_artifact_write_pattern_score: 0,
-    o11_dataloader_read_pattern_score: 0,
-    o11_backup_or_replication_pattern_score: 0,
-    o11_storage_cotraffic_score: 0,
-    o12_signed_ml_logs_present: false,
-    o12_declared_parameter_count_b: 0,
-    o12_training_tokens_b: 0,
-    o12_step_count: 0,
-    o12_loss_curve_present: false,
-    o12_optimizer_state_present: false,
-    o12_log_delivery_delay_hours: 0,
-    o12_log_completeness_fraction: 1,
-    o12_declaration_consistency_score: 1,
-  });
+function cadenceScore(seconds) {
+  const value = asNumber(seconds);
+  if (value <= 0) return 0;
+  if (value >= 2 && value <= 90) return 1;
+  if (value <= 300) return 0.55;
+  return 0.2;
 }
 
-function deriveFeatureState(features) {
+function siteCapacity(site, features) {
+  return asNumber(
+    site?.normalized_training_compute_capacity ??
+      site?.capacity ??
+      features.o1_normalized_training_compute_capacity ??
+      features.o1_accelerator_count
+  );
+}
+
+function siteTopology(site, features) {
+  return asNumber(
+    site?.largest_low_latency_topology_footprint ??
+      site?.topology ??
+      features.o1_largest_low_latency_topology_footprint ??
+      siteCapacity(site, features)
+  );
+}
+
+function siteRackDesignKw(site, features) {
+  return Math.max(
+    1,
+    asNumber(
+      site?.rack_power_design_kw ??
+        site?.rack_design_kw ??
+        features.o8_rack_design_kw ??
+        Math.max(1000, asNumber(features.o8_rack_it_power_kw))
+    )
+  );
+}
+
+function siteBaselineMw(site, features) {
+  return asNumber(site?.baseline_it_mw ?? features.o8_facility_it_power_mw ?? 0);
+}
+
+function deriveFeatureState(features = {}, site = null) {
   const out = { ...features };
-  if (
-    hasNonPositiveFeature(out, "o2_max_concurrent_normalized_gpus") ||
-    hasNonPositiveFeature(out, "o2_allocation_duration_hours")
-  ) {
-    clearActiveWorkloadEvidence(out);
-  }
-  const capacity = asNumber(out.o1_normalized_h100e_capacity);
-  const allocation = asNumber(out.o2_max_concurrent_normalized_gpus);
-  const duration = asNumber(out.o2_allocation_duration_hours);
-  const gpuHoursRatio = (allocation * duration) / (512 * 24);
-  if (Number.isFinite(gpuHoursRatio)) {
-    out.o2_gpu_hours_policy_ratio = gpuHoursRatio;
-    out.policy_compute_ratio = gpuHoursRatio;
-  }
-  out.o2_concurrency_fraction_domain = capacity > 0 ? clamp(allocation / capacity) : 0;
-  out.o10_world_size = Math.round(allocation);
-  out.o10_same_image_gpu_count = Math.round(allocation);
-  out.capacity_possible = capacity >= 512 && asNumber(out.o1_largest_contiguous_domain_gpus, capacity) >= 512;
-  out.o14_min_critical_coverage = clamp(out.o14_min_critical_coverage, 0, 1);
-  out.o14_gap_fraction_critical = clamp(out.o14_gap_fraction_critical, 0, 1);
+  const capacity = siteCapacity(site, out);
+  const topology = siteTopology(site, out);
+  const allocation = Math.max(0, asNumber(out.o2_allocated_accelerator_count));
+  const duration = Math.max(0, asNumber(out.o2_allocation_duration));
+
+  out.o1_normalized_training_compute_capacity = capacity;
+  out.o1_largest_low_latency_topology_footprint = topology;
+  out.o1_partitioning_fraction = clamp(out.o1_partitioning_fraction, 0, 1);
+  out.o2_allocated_accelerator_count = allocation;
+  out.o2_allocation_duration = duration;
+  out.o2_allocated_compute_hours = allocation * duration;
+  out.o2_concurrency_fraction = capacity > 0 ? clamp(allocation / capacity, 0, 2) : 0;
+  out.o10_distributed_world_size_rank_count = Math.max(
+    asNumber(out.o10_distributed_world_size_rank_count),
+    Math.round(allocation)
+  );
+  out.o14_telemetry_coverage_fraction_by_layer = clamp(out.o14_telemetry_coverage_fraction_by_layer, 0, 1);
+  out.o14_telemetry_gap_fraction_missed_scrapes = clamp(out.o14_telemetry_gap_fraction_missed_scrapes, 0, 1);
+  out.o16_probe_throughput_ratio = Math.max(0, asNumber(out.o16_probe_throughput_ratio, 1));
+  out.o16_probe_latency_inflation = Math.max(0, asNumber(out.o16_probe_latency_inflation, 1));
+  out.o16_vram_residency_free_memory_test = clamp(out.o16_vram_residency_free_memory_test, 0, 1);
+  out.capacity_possible = capacity >= 512 && topology >= 512 && out.o1_partitioning_fraction < 0.75;
   return out;
 }
 
-function consistencyWarnings(inputFeatures) {
-  const row = deriveFeatureState(inputFeatures);
-  const capacity = asNumber(row.o1_normalized_h100e_capacity);
-  const allocation = asNumber(row.o2_max_concurrent_normalized_gpus);
-  const fabricFootprint = asNumber(row.o7_synchronized_fabric_footprint);
-  const warnings = [];
+function scoreFeatures(inputFeatures = {}, site = null) {
+  const features = deriveFeatureState(inputFeatures, site);
+  const capacity = siteCapacity(site, features);
+  const topology = siteTopology(site, features);
+  const rackDesignKw = siteRackDesignKw(site, features);
+  const baselineMw = siteBaselineMw(site, features);
+  const runtime = String(features.o10_runtime_framework_class || "");
+  const declared = String(features.o2_declared_workload_class || "");
+  const policyRatio = asNumber(features.o2_allocated_compute_hours) / POLICY_GPU_HOURS;
+  const rackPowerFraction = asNumber(features.o8_rack_it_power_kw) / rackDesignKw;
+  const trainingRuntime = isOneOf(runtime, TRAINING_RUNTIME_MARKERS);
+  const falsePositiveRuntime = isOneOf(runtime, FALSE_POSITIVE_RUNTIME_MARKERS);
+  const falsePositiveDeclared = FALSE_POSITIVE_DECLARED_CLASSES.has(declared.toLowerCase());
+  const semanticLogs =
+    String(features.o12_loss_optimizer_checkpoint_metadata || "absent") !== "absent" ||
+    asNumber(features.o12_declared_model_parameter_count) > 1e10;
 
-  if (capacity > 0 && allocation > capacity + 1) {
-    warnings.push("allocated GPUs exceed monitored H100e capacity");
+  let checkpointScore = 0;
+  if (asNumber(features.o11_checkpoint_write_size) > 0) {
+    checkpointScore = Math.max(checkpointScore, ramp(Math.log10(asNumber(features.o11_checkpoint_write_size) + 1), 10.5, 12.5));
   }
-  if (capacity > 0 && fabricFootprint > capacity + 1) {
-    warnings.push("fabric footprint exceeds monitored H100e capacity");
-  }
-  if (allocation > 0 && fabricFootprint > allocation + 1) {
-    warnings.push("fabric footprint exceeds allocated GPUs");
+  if (asNumber(features.o11_checkpoint_period) >= 600 && asNumber(features.o11_checkpoint_period) <= 21600) {
+    checkpointScore = Math.max(checkpointScore, 0.75);
   }
 
-  return warnings;
-}
-
-function evidenceFlags(inputFeatures) {
-  const row = deriveFeatureState(inputFeatures);
-  const capacity = asBool(row.capacity_possible);
-  const externalConflict = asNumber(row.o17_external_capacity_conflict_score) >= 0.5;
-  const allocationGpus = asNumber(row.o2_max_concurrent_normalized_gpus);
-  const allocationHours = asNumber(row.o2_allocation_duration_hours);
-  const gpuHoursRatio = asNumber(row.o2_gpu_hours_policy_ratio);
-  const policyRatio = asNumber(row.policy_compute_ratio);
-  const gpuUtil = asNumber(row.o4_gpu_util_p95);
-  const gpuDuty = asNumber(row.o4_gpu_util_duty_gt_70);
-  const tensor = asNumber(row.o4_sm_tensor_active_p95);
-  const fabricFootprint = asNumber(row.o7_synchronized_fabric_footprint);
-  const fabricPeriodicity = asNumber(row.o7_collective_periodicity_score);
-  const fabricUtil = asNumber(row.o7_scaleout_port_util_p95);
-  const rackPower = asNumber(row.o8_rack_power_fraction_p95);
-  const checkpoint = asNumber(row.o11_checkpoint_periodicity_score);
-  const checkpointTb = asNumber(row.o11_checkpoint_write_tb_per_event);
-  const storagePattern = asNumber(row.o11_read_write_training_pattern_score);
-  const signedLogs = asBool(row.o12_signed_ml_logs_present);
-  const declaredParams = asNumber(row.o12_declared_parameter_count_b);
-  const trainingTokens = asNumber(row.o12_training_tokens_b);
-  const optimizerState = asBool(row.o12_optimizer_state_present);
-  const minCoverage = asNumber(row.o14_min_critical_coverage, 1);
-  const gapFraction = asNumber(row.o14_gap_fraction_critical);
-  const ccFraction = asNumber(row.o13_confidential_compute_mode_fraction);
-  const counterResets = asNumber(row.o14_counter_reset_count);
-  const criticalCoverages = [
-    asNumber(row.o1_coverage_fraction, 1),
-    asNumber(row.o2_coverage_fraction, 1),
-    asNumber(row.o4_coverage_fraction, 1),
-    asNumber(row.o7_coverage_fraction, 1),
-    asNumber(row.o8_coverage_fraction, 1),
-    asNumber(row.o14_coverage_fraction, minCoverage),
-  ];
-  const criticalReasons = [
-    row.o1_missing_reason,
-    row.o2_missing_reason,
-    row.o4_missing_reason,
-    row.o7_missing_reason,
-    row.o8_missing_reason,
-    row.o14_missing_reason,
-  ].map((value) => String(value || "observed"));
-  const runtime = String(row.o10_runtime_framework_class || "").toLowerCase();
-  const declaredClass = String(row.o2_declared_workload_class || "").toLowerCase();
-  const o4Missing = String(row.o4_missing_reason || "");
-  const hasConsistencyWarnings = consistencyWarnings(row).length > 0;
-  const noActiveAllocation = allocationGpus <= 0 && allocationHours <= 0;
-
-  const allocation =
-    allocationGpus >= 512 ||
-    gpuHoursRatio >= 1 ||
-    policyRatio >= 1 ||
-    (allocationGpus >= 256 && allocationHours >= 12);
-  const gpuActivity = gpuUtil >= 70 || gpuDuty >= 0.45 || tensor >= 60;
-  const fabricSync = fabricFootprint >= 256 || fabricPeriodicity >= 0.55 || fabricUtil >= 0.65;
-  const physicalSupport = rackPower >= 0.55;
-  const storageSemantic = checkpoint >= 0.55 || checkpointTb >= 0.25 || storagePattern >= 0.6;
-  const runtimeSemantic =
-    runtime.includes("training") ||
-    runtime.includes("fine_tune") ||
-    runtime.includes("pytorch_distributed");
-  const mlSemantic = signedLogs || declaredParams >= 50 || trainingTokens >= 100 || optimizerState;
-  const integrity =
-    gapFraction > 0.05 ||
-    minCoverage < 0.8 ||
-    criticalCoverages.some((coverage) => coverage < 0.8) ||
-    criticalReasons.some((reason) => !["observed", ""].includes(reason)) ||
-    ccFraction > 0.5 ||
-    counterResets > 0 ||
-    asBool(row.o15_unapproved_physical_change_near_window) ||
-    o4Missing === "counter_disabled_by_cc_mode" ||
-    hasConsistencyWarnings;
-  const falsePositivePattern =
-    FALSE_POSITIVE_RUNTIME_MARKERS.some((marker) => runtime.includes(marker)) ||
-    FALSE_POSITIVE_DECLARED_CLASSES.has(declaredClass);
-  const reservedWithoutActivity =
-    allocationGpus >= 512 &&
-    gpuUtil < 30 &&
-    fabricFootprint < 64 &&
-    fabricPeriodicity < 0.2 &&
-    !storageSemantic &&
-    !mlSemantic;
-
-  return {
-    row,
-    capacity,
-    externalConflict,
-    noActiveAllocation,
-    allocation,
-    gpuActivity,
-    fabricSync,
-    physicalSupport,
-    storageSemantic,
-    runtimeSemantic,
-    mlSemantic,
-    signedLogs,
-    integrity,
-    falsePositivePattern,
-    reservedWithoutActivity,
-    strongCoverage: minCoverage >= 0.9 && gapFraction <= 0.05,
-    policyScale: policyRatio >= 1 || gpuHoursRatio >= 1 || allocationGpus >= 512,
+  const scores = {
+    capacity: features.capacity_possible ? 1 : 0,
+    allocation: Math.max(
+      ramp(features.o2_allocated_accelerator_count, 64, 512),
+      ramp(policyRatio, 0.15, 1),
+      ramp(features.o2_allocation_duration, 1, 72)
+    ),
+    cloud: Math.max(
+      ramp(features.o3_batch_provisioning_event_size, 64, 512),
+      ramp(features.o3_capacity_reservation_block_duration, 0.25, 7) *
+        clamp(features.o3_training_instance_type_fraction)
+    ),
+    gpu:
+      ramp(features.o4_gpu_busy_percent, 25, 85) * 0.35 +
+      ramp(features.o4_sm_tensor_core_active_percent, 20, 85) * 0.25 +
+      ramp(features.o4_gpu_power_draw_or_fraction, 0.25, 0.85) * 0.25 +
+      ramp(features.o4_hbm_memory_used, 0.25, 0.85) * 0.15,
+    fabric:
+      ramp(features.o7_scaleout_port_utilization, 15, 70) * 0.25 +
+      ramp(features.o7_synchronized_fabric_footprint, 64, 512) * 0.35 +
+      cadenceScore(features.o7_collective_periodicity_step_cadence) * 0.25 +
+      ramp(features.o6_nvlink_nvswitch_link_utilization, 15, 75) * 0.15,
+    physical: Math.max(
+      ramp(rackPowerFraction, 0.25, 0.75),
+      ramp(features.o9_gpu_hbm_temperature_celsius, 45, 78) * 0.7
+    ),
+    storage: checkpointScore * 0.7 + ramp(features.o11_read_write_operation_pattern, 0.4, 1.1) * 0.3,
+    runtime: trainingRuntime ? 0.9 : runtime && !["none", "unknown"].includes(runtime.toLowerCase()) ? 0.2 : 0,
+    ml_logs: semanticLogs ? 1 : 0,
+    coverage: clamp(features.o14_telemetry_coverage_fraction_by_layer),
   };
-}
+  for (const key of Object.keys(scores)) scores[key] = clamp(scores[key]);
 
-function predictRuleLabel(features) {
-  const flags = evidenceFlags(features);
-  const primaryCount = Number(flags.allocation) + Number(flags.gpuActivity) + Number(flags.fabricSync);
-  const semanticCount = Number(flags.runtimeSemantic) + Number(flags.storageSemantic) + Number(flags.mlSemantic);
+  const primary = Math.max(scores.allocation, scores.cloud) * 0.2 + scores.gpu * 0.16 + scores.fabric * 0.24;
+  const support = scores.physical * 0.12 + scores.storage * 0.1;
+  const semantic = scores.runtime * 0.08 + scores.ml_logs * 0.1;
+  let trainingProbability = primary + support + semantic;
 
-  if (flags.noActiveAllocation) {
-    return 0;
+  if (falsePositiveRuntime || falsePositiveDeclared) trainingProbability *= 0.62;
+  if (!features.capacity_possible && asNumber(features.o17_external_it_power_capacity_estimate) <= baselineMw + 2) {
+    trainingProbability = Math.min(trainingProbability, 0.18);
   }
-  if (!flags.capacity && !flags.externalConflict) {
-    return flags.strongCoverage ? 0 : 1;
+  if (Math.max(scores.allocation, scores.gpu, scores.fabric, scores.storage, scores.runtime, scores.ml_logs) < 0.25) {
+    trainingProbability = Math.min(trainingProbability, scores.coverage > 0.8 ? 0.08 : 0.18);
   }
-  if (flags.signedLogs && flags.policyScale && primaryCount >= 2) {
-    return 4;
+  trainingProbability = clamp(trainingProbability);
+
+  const labelCaps = [];
+  let labelCap = 4;
+  if (!features.capacity_possible) {
+    labelCap = Math.min(labelCap, 1);
+    labelCaps.push("capacity_below_threshold");
   }
+  if (scores.physical > 0.5 && Math.max(scores.allocation, scores.gpu, scores.fabric, scores.storage, scores.runtime, scores.ml_logs) < 0.35) {
+    labelCap = Math.min(labelCap, 2);
+    labelCaps.push("physical_only_cap");
+  }
+  if (Math.max(scores.allocation, scores.gpu, scores.fabric, scores.storage, scores.runtime, scores.ml_logs) < 0.3) {
+    labelCap = Math.min(labelCap, 1);
+    labelCaps.push("weak_activity_cap");
+  }
+
+  let label =
+    trainingProbability < 0.12 ? 0 :
+    trainingProbability < 0.3 ? 1 :
+    trainingProbability < 0.55 ? 2 : 3;
   if (
-    flags.allocation &&
-    flags.gpuActivity &&
-    flags.fabricSync &&
-    flags.physicalSupport &&
-    semanticCount >= 2 &&
-    flags.policyScale
+    trainingProbability >= 0.78 &&
+    (scores.ml_logs > 0.8 || (scores.allocation > 0.75 && scores.gpu > 0.65 && scores.fabric > 0.65 && scores.physical > 0.55 && scores.storage > 0.45))
   ) {
-    return 4;
+    label = 4;
   }
-  if (flags.reservedWithoutActivity) {
-    return 1;
-  }
-  if (flags.falsePositivePattern && (flags.gpuActivity || flags.fabricSync || flags.physicalSupport)) {
-    return 2;
-  }
-  if (flags.integrity && !flags.mlSemantic && (primaryCount >= 1 || flags.physicalSupport)) {
-    return 2;
-  }
-  if (primaryCount >= 2 && (flags.physicalSupport || semanticCount >= 1)) {
-    return 3;
-  }
-  if (primaryCount >= 1 || flags.physicalSupport || semanticCount >= 1) {
-    return 2;
-  }
-  return flags.capacity ? 1 : 0;
-}
+  label = Math.min(label, labelCap);
 
-function probabilitiesForLabel(label) {
-  const confidenceByLabel = [0.86, 0.74, 0.68, 0.78, 0.84];
-  const confidence = confidenceByLabel[label] || 0.72;
-  const probabilities = new Array(5).fill((1 - confidence) / 4);
-  probabilities[label] = confidence;
-  return probabilities;
-}
+  const triggered = discrepancyRules(features, scores, {
+    capacity,
+    topology,
+    rackPowerFraction,
+    falsePositiveRuntime,
+    trainingRuntime,
+    semanticLogs,
+    baselineMw,
+  });
+  const evasionProbability = evasionProbabilityFromRules(triggered);
+  const evasionLabel = evasionProbability < 0.18 ? "clear" : evasionProbability < 0.45 ? "watch" : evasionProbability < 0.7 ? "suspicious" : "likely";
+  const noRunConfidence = clamp((1 - trainingProbability) * scores.coverage * (1 - evasionProbability * 0.75));
+  const topEvidence = topTrainingEvidence(scores, { falsePositiveRuntime });
+  const criticalMissingLayers = missingLayerWarnings(features, scores, triggered);
 
-function topEvidenceForFeatures(features) {
-  const row = deriveFeatureState(features);
-  const evidence = consistencyWarnings(row).map((warning) => `inconsistent edit: ${warning}`);
-  const capacity = asBool(row.capacity_possible);
-  const externalConflict = asNumber(row.o17_external_capacity_conflict_score);
-  const allocationGpus = asNumber(row.o2_max_concurrent_normalized_gpus);
-  const allocationHours = asNumber(row.o2_allocation_duration_hours);
-  const gpuHoursRatio = asNumber(row.o2_gpu_hours_policy_ratio);
-  const gpuUtil = asNumber(row.o4_gpu_util_p95);
-  const gpuDuty = asNumber(row.o4_gpu_util_duty_gt_70);
-  const tensor = asNumber(row.o4_sm_tensor_active_p95);
-  const fabricFootprint = asNumber(row.o7_synchronized_fabric_footprint);
-  const fabricPeriodicity = asNumber(row.o7_collective_periodicity_score);
-  const fabricUtil = asNumber(row.o7_scaleout_port_util_p95);
-  const rackPower = asNumber(row.o8_rack_power_fraction_p95);
-  const checkpoint = asNumber(row.o11_checkpoint_periodicity_score);
-  const signedLogs = asBool(row.o12_signed_ml_logs_present);
-  const minCoverage = asNumber(row.o14_min_critical_coverage, 1);
-  const gapFraction = asNumber(row.o14_gap_fraction_critical);
-  const ccFraction = asNumber(row.o13_confidential_compute_mode_fraction);
-  const o4Missing = String(row.o4_missing_reason || "");
-  const runtime = String(row.o10_runtime_framework_class || "");
-  const declaredClass = String(row.o2_declared_workload_class || "").toLowerCase();
-  const noActiveAllocation = allocationGpus <= 0 && allocationHours <= 0;
-  const reservedWithoutActivity =
-    (declaredClass === "reserved" || asBool(row.o2_reservation_exclusive_flag)) &&
-    allocationGpus >= 512 &&
-    gpuUtil < 30 &&
-    gpuDuty < 0.15 &&
-    tensor < 20 &&
-    fabricFootprint < 64 &&
-    fabricPeriodicity < 0.2 &&
-    fabricUtil < 0.25 &&
-    checkpoint < 0.2 &&
-    !signedLogs;
-
-  if (noActiveAllocation) evidence.push("no active allocation");
-  if (o4Missing === "collector_gap") evidence.push("GPU telemetry collector gap");
-  if (ccFraction > 0.5 || o4Missing === "counter_disabled_by_cc_mode") {
-    evidence.push("counter disabled by confidential-compute mode");
-  }
-  if (!capacity && externalConflict < 0.5) evidence.push("capacity below policy threshold");
-  if (externalConflict >= 0.5) evidence.push("external capacity conflict");
-  if (allocationGpus >= 512 || gpuHoursRatio >= 1) evidence.push("large allocation");
-  else if (allocationGpus >= 128) evidence.push("moderate allocation");
-  if (allocationHours >= 24) evidence.push("long allocation duration");
-  if (reservedWithoutActivity) evidence.push("reserved capacity without activity");
-  if (gpuUtil >= 70 || gpuDuty >= 0.45 || tensor >= 60) evidence.push("high GPU activity");
-  if (fabricFootprint >= 512 || fabricPeriodicity >= 0.6) evidence.push("synchronized scale-out fabric");
-  if (rackPower >= 0.6) evidence.push("power corroboration");
-  if (runtime.includes("training") || runtime.includes("fine_tune")) evidence.push("training runtime metadata");
-  if (checkpoint >= 0.55) evidence.push("checkpoint cadence");
-  if (signedLogs) evidence.push("signed ML logs");
-  if (minCoverage < 0.8 || gapFraction > 0.05) evidence.push("low critical coverage");
-  return evidence.length ? evidence.slice(0, 8) : ["no strong positive evidence"];
-}
-
-function normalizeEvidenceForFeatures(items, features) {
-  const row = deriveFeatureState(features);
-  const gpuUtil = asNumber(row.o4_gpu_util_p95);
-  const gpuDuty = asNumber(row.o4_gpu_util_duty_gt_70);
-  const tensor = asNumber(row.o4_sm_tensor_active_p95);
-  const fabricFootprint = asNumber(row.o7_synchronized_fabric_footprint);
-  const fabricPeriodicity = asNumber(row.o7_collective_periodicity_score);
-  const fabricUtil = asNumber(row.o7_scaleout_port_util_p95);
-  const rackPower = asNumber(row.o8_rack_power_fraction_p95);
-  const checkpoint = asNumber(row.o11_checkpoint_periodicity_score);
-  const signedLogs = asBool(row.o12_signed_ml_logs_present);
-  const runtime = String(row.o10_runtime_framework_class || "");
-  const allocationGpus = asNumber(row.o2_max_concurrent_normalized_gpus);
-  const declaredClass = String(row.o2_declared_workload_class || "").toLowerCase();
-  const reservedWithoutActivity =
-    (declaredClass === "reserved" || asBool(row.o2_reservation_exclusive_flag)) &&
-    allocationGpus >= 512 &&
-    gpuUtil < 30 &&
-    gpuDuty < 0.15 &&
-    tensor < 20 &&
-    fabricFootprint < 64 &&
-    fabricPeriodicity < 0.2 &&
-    fabricUtil < 0.25 &&
-    checkpoint < 0.2 &&
-    !signedLogs;
-
-  const keep = [];
-  for (const item of items) {
-    if (item === "high GPU activity" && gpuUtil < 70 && gpuDuty < 0.45 && tensor < 60) continue;
-    if (item === "synchronized scale-out fabric" && fabricFootprint < 512 && fabricPeriodicity < 0.6 && fabricUtil < 0.65) continue;
-    if (item === "power corroboration" && rackPower < 0.6) continue;
-    if (item === "checkpoint cadence" && checkpoint < 0.55) continue;
-    if (item === "signed ML logs" && !signedLogs) continue;
-    if (item === "training runtime metadata" && !runtime.includes("training") && !runtime.includes("fine_tune")) continue;
-    keep.push(item);
-  }
-  if (reservedWithoutActivity && !keep.includes("reserved capacity without activity")) {
-    keep.push("reserved capacity without activity");
-  }
-  return keep.length ? keep.slice(0, 8) : ["no strong positive evidence"];
-}
-
-function criticalMissingLayers(features) {
-  const row = deriveFeatureState(features);
-  const layers = [
-    ["O1", "o1_coverage_fraction", "o1_missing_reason"],
-    ["O2", "o2_coverage_fraction", "o2_missing_reason"],
-    ["O4", "o4_coverage_fraction", "o4_missing_reason"],
-    ["O7", "o7_coverage_fraction", "o7_missing_reason"],
-    ["O8", "o8_coverage_fraction", "o8_missing_reason"],
-    ["O14", "o14_coverage_fraction", "o14_missing_reason"],
-  ];
-  const out = [];
-  const gapFraction = asNumber(row.o14_gap_fraction_critical);
-  for (const [observable, coverageKey, reasonKey] of layers) {
-    const coverage = asNumber(row[coverageKey], coverageKey === "o14_coverage_fraction" ? row.o14_min_critical_coverage : 1);
-    const reason = String(row[reasonKey] || "observed");
-    if (coverage < 0.8 || !["observed", ""].includes(reason)) {
-      out.push(`${observable}: ${reason}, coverage ${coverage.toFixed(2)}`);
-    }
-  }
-  if (!out.length && asNumber(row.o14_min_critical_coverage, 1) < 0.8) {
-    out.push(`O14: critical coverage ${asNumber(row.o14_min_critical_coverage).toFixed(2)}`);
-  }
-  if (gapFraction > 0.05 && !out.some((item) => item.startsWith("O14:"))) {
-    out.push(`O14: gap fraction ${gapFraction.toFixed(2)}`);
-  }
-  return out;
-}
-
-function scoreFeatures(inputFeatures) {
-  const features = deriveFeatureState(inputFeatures);
-  const warnings = consistencyWarnings(features);
-  let label = predictRuleLabel(features);
-  if (warnings.length && label < 2) {
-    label = 2;
-  }
-  const probabilities = probabilitiesForLabel(label);
-  const pLarge = probabilities[3] + probabilities[4];
-  const severity = probabilities.reduce((sum, probability, index) => sum + probability * index, 0);
-  const coverage = asNumber(features.o14_min_critical_coverage, 1);
-  const negative = probabilities[0] * coverage;
-  const flags = evidenceFlags(features);
   return {
-    mode: "Rule sandbox",
+    mode: "Catalog v2 deterministic evaluator",
     label,
     labelName: labelName(label),
-    probabilities,
-    pLarge,
-    severity,
-    negativeCertificationConfidence: negative,
-    capacityPossible: asBool(features.capacity_possible),
-    integrityWarning: flags.integrity || warnings.length > 0,
-    criticalMissingLayers: criticalMissingLayers(features),
-    topEvidence: topEvidenceForFeatures(features),
-    consistencyWarnings: warnings,
+    probabilities: probabilitiesFor(trainingProbability, labelCap),
+    pLarge: trainingProbability,
+    severity: trainingProbability * 4,
+    trainingProbability,
+    trainingConfidence: clamp(scores.coverage * (1 - evasionProbability * 0.4)),
+    evasionProbability,
+    evasionLabel,
+    evasionLabelName: evasionName(evasionLabel),
+    evasionRules: triggered.map((item) => item.rule_id),
+    benignExplanations: benignExplanations(triggered.map((item) => item.rule_id)),
+    negativeCertificationConfidence: noRunConfidence,
+    capacityPossible: !!features.capacity_possible,
+    integrityWarning: triggered.length > 0 || scores.coverage < 0.8,
+    criticalMissingLayers,
+    topEvidence,
+    consistencyWarnings: userFacingWarnings(features, scores, triggered, { capacity, topology }),
+    labelCapsApplied: labelCaps,
+    layerScores: scores,
     features,
   };
 }
 
-function replayResult(row) {
-  return {
-    mode: "Calibrated model replay",
-    label: Number(row.predicted_label),
-    labelName: labelName(Number(row.predicted_label)),
-    probabilities: row.p_labels || [0, 0, 0, 0, 0],
-    pLarge: asNumber(row.p_large_training),
-    severity: asNumber(row.severity_score),
-    negativeCertificationConfidence: asNumber(row.negative_certification_confidence),
-    capacityPossible: asBool(row.features?.capacity_possible),
-    integrityWarning: asBool(row.integrity_warning),
-    criticalMissingLayers: splitSemicolon(row.critical_missing_layers),
-    topEvidence: normalizeEvidenceForFeatures(splitSemicolon(row.top_evidence), row.features || {}),
-    consistencyWarnings: [],
-    features: deriveFeatureState(row.features || {}),
-  };
+function discrepancyRules(features, scores, context) {
+  const triggered = [];
+  const add = (rule_id, severity_weight) => triggered.push({ rule_id, severity_weight });
+  const highActivity = scores.gpu > 0.6 || scores.fabric > 0.6 || scores.physical > 0.65;
+  const lowAllocation = asNumber(features.o2_allocated_accelerator_count) < 16 || asNumber(features.o2_allocation_duration) <= 0;
+  const visibleLow = scores.gpu < 0.25 && scores.fabric < 0.25;
+
+  if (lowAllocation && highActivity && scores.coverage > 0.65) add("discrepancy_allocation_zero_but_activity_high", 1);
+  if (context.rackPowerFraction > 0.6 && visibleLow && scores.coverage > 0.7) add("discrepancy_power_high_visible_telemetry_low", 1);
+  if (scores.fabric > 0.65 && scores.allocation < 0.25) add("discrepancy_fabric_high_scheduler_low", 1);
+  if (scores.cloud > 0.65 && scores.allocation < 0.25) add("discrepancy_cloud_scheduler_mismatch", 0.65);
+  if (
+    asNumber(features.o2_allocated_accelerator_count) > context.capacity * 1.02 ||
+    asNumber(features.o7_synchronized_fabric_footprint) > context.topology * 1.05 ||
+    asNumber(features.o10_distributed_world_size_rank_count) > context.capacity * 1.5
+  ) {
+    add("discrepancy_counts_exceed_capacity", 1);
+  }
+  if (asNumber(features.o14_telemetry_gap_fraction_missed_scrapes) > 0.12 && highActivity) {
+    add("discrepancy_critical_telemetry_gap_during_candidate_window", 1);
+  }
+  if (asNumber(features.o14_counter_reset_config_change_count) > 0 && highActivity) {
+    add("discrepancy_counter_reset_or_config_change_near_activity", 0.65);
+  }
+  if (
+    ["security_blocked", "disabled"].includes(String(features.o5_profiler_availability_state || "")) &&
+    String(features.o13_confidential_compute_security_mode || "") !== "on" &&
+    highActivity
+  ) {
+    add("discrepancy_confidential_compute_unexplained_counter_absence", 0.65);
+  }
+  if (context.falsePositiveRuntime && scores.gpu > 0.65 && scores.fabric > 0.55 && scores.storage > 0.45) {
+    add("discrepancy_semantic_declaration_conflicts_with_activity", 0.65);
+  }
+  if (scores.storage > 0.65 && !context.trainingRuntime && !context.semanticLogs && Math.max(scores.gpu, scores.fabric) > 0.45) {
+    add("discrepancy_checkpoint_without_training_context", 0.65);
+  }
+  const externalConflict =
+    asNumber(features.o17_external_it_power_capacity_estimate) > context.baselineMw + 4 ||
+    asNumber(features.o17_chip_shipment_procurement_indicators) > context.capacity * 1.8;
+  if (externalConflict) add("discrepancy_external_capacity_conflict", 0.65);
+  if (
+    asNumber(features.o16_probe_throughput_ratio, 1) < 0.6 ||
+    asNumber(features.o16_probe_latency_inflation, 1) > 1.7 ||
+    asNumber(features.o16_vram_residency_free_memory_test, 1) < 0.4
+  ) {
+    add("discrepancy_active_probe_hidden_load", 0.65);
+  }
+  if (
+    (asNumber(features.o15_rack_door_badge_maintenance_events) > 0 || asNumber(features.o15_firmware_bmc_change_events) > 0) &&
+    (asNumber(features.o14_telemetry_gap_fraction_missed_scrapes) > 0.08 || asNumber(features.o1_inventory_delta_rate) > 0.5)
+  ) {
+    add("discrepancy_physical_or_firmware_change_near_gap", 0.65);
+  }
+  return triggered;
 }
 
-function splitSemicolon(value) {
-  if (!value) return [];
-  return String(value)
-    .split(";")
-    .map((item) => item.trim())
-    .filter(Boolean);
+function evasionProbabilityFromRules(triggered) {
+  let probability = 0;
+  for (const item of triggered) {
+    probability = 1 - (1 - probability) * (1 - item.severity_weight * 0.58);
+  }
+  return clamp(probability);
+}
+
+function topTrainingEvidence(scores, context) {
+  const evidence = [];
+  if (scores.allocation > 0.5) evidence.push("large scheduler/allocation evidence");
+  if (scores.cloud > 0.5) evidence.push("cloud provisioning/reservation evidence");
+  if (scores.gpu > 0.5) evidence.push("high GPU activity");
+  if (scores.fabric > 0.5) evidence.push("synchronized scale-out fabric");
+  if (scores.physical > 0.5) evidence.push("power/thermal corroboration");
+  if (scores.storage > 0.5) evidence.push("checkpoint/storage pattern");
+  if (scores.runtime > 0.5) evidence.push("training runtime semantics");
+  if (scores.ml_logs > 0.5) evidence.push("ML logs/declarations");
+  if (context.falsePositiveRuntime) evidence.push("countervailing non-training runtime/declaration");
+  return evidence.length ? evidence.slice(0, 8) : ["no strong positive training evidence"];
+}
+
+function missingLayerWarnings(features, scores, triggered) {
+  const warnings = [];
+  if (scores.coverage < 0.8) warnings.push("cross-layer telemetry coverage below 80%");
+  if (asNumber(features.o14_telemetry_gap_fraction_missed_scrapes) > 0.08) warnings.push("candidate window has material telemetry gaps");
+  if (String(features.o5_profiler_availability_state || "") !== "available") warnings.push("profiler/counter availability is limited");
+  if (asNumber(features.o7_job_to_port_mapping_coverage) < 0.5 && scores.fabric > 0.45) warnings.push("weak job-to-port mapping for fabric evidence");
+  if (triggered.length) warnings.push("discrepancy rules require reconciliation before no-run certification");
+  return warnings;
+}
+
+function userFacingWarnings(features, scores, triggered, context) {
+  const warnings = [];
+  if (asNumber(features.o2_allocated_accelerator_count) > context.capacity * 1.02) {
+    warnings.push("allocated accelerators exceed monitored capacity");
+  }
+  if (asNumber(features.o7_synchronized_fabric_footprint) > context.topology * 1.05) {
+    warnings.push("fabric footprint exceeds largest low-latency topology");
+  }
+  for (const item of triggered) warnings.push(item.rule_id.replace(/^discrepancy_/, "").replaceAll("_", " "));
+  if (scores.coverage < 0.8) warnings.push("low telemetry coverage limits confidence");
+  return [...new Set(warnings)];
+}
+
+function benignExplanations(ruleIds) {
+  const out = [];
+  for (const ruleId of ruleIds) {
+    for (const item of BENIGN_EXPLANATIONS[ruleId] || []) {
+      if (!out.includes(item)) out.push(item);
+    }
+  }
+  return out.slice(0, 8);
+}
+
+function probabilitiesFor(probability, labelCap = 4) {
+  const centers = [0.05, 0.2, 0.42, 0.66, 0.88];
+  const weights = centers.map((center, label) => {
+    const capPenalty = label > labelCap ? 0.12 : 1;
+    return Math.exp(-Math.abs(probability - center) * 7.5) * capPenalty;
+  });
+  const total = weights.reduce((sum, value) => sum + value, 0) || 1;
+  return weights.map((value) => value / total);
+}
+
+function replayResult(row, site = null) {
+  const featureResult = scoreFeatures(row.features || {}, site);
+  const label = Number.isFinite(Number(row.training_label)) ? Number(row.training_label) : featureResult.label;
+  const pLarge = Number.isFinite(Number(row.training_probability)) ? Number(row.training_probability) : featureResult.pLarge;
+  const evasionProbability = Number.isFinite(Number(row.evasion_probability)) ? Number(row.evasion_probability) : featureResult.evasionProbability;
+  const evasionLabel = row.evasion_label || featureResult.evasionLabel;
+  const labelCap = Math.max(label, 0);
+  return {
+    ...featureResult,
+    mode: "Catalog v2 generated datapoint",
+    label,
+    labelName: labelName(label),
+    probabilities: probabilitiesFor(pLarge, labelCap),
+    pLarge,
+    severity: pLarge * 4,
+    trainingProbability: pLarge,
+    trainingConfidence: asNumber(row.training_confidence, featureResult.trainingConfidence),
+    evasionProbability,
+    evasionLabel,
+    evasionLabelName: evasionName(evasionLabel),
+    evasionRules: Array.isArray(row.evasion_rule_ids) ? row.evasion_rule_ids : featureResult.evasionRules,
+    benignExplanations: Array.isArray(row.benign_explanations_to_check)
+      ? row.benign_explanations_to_check
+      : featureResult.benignExplanations,
+    negativeCertificationConfidence: asNumber(row.negative_certification_confidence, featureResult.negativeCertificationConfidence),
+    capacityPossible: row.capacity_possible ?? featureResult.capacityPossible,
+    integrityWarning: row.integrity_warning ?? featureResult.integrityWarning,
+    topEvidence: Array.isArray(row.top_training_evidence) ? row.top_training_evidence : featureResult.topEvidence,
+    labelCapsApplied: Array.isArray(row.label_caps_applied) ? row.label_caps_applied : featureResult.labelCapsApplied,
+    layerScores: row.layer_scores || featureResult.layerScores,
+    features: deriveFeatureState(row.features || {}, site),
+  };
 }
 
 window.DCVScoring = {
   asBool,
   asNumber,
+  cadenceScore,
   clamp,
-  consistencyWarnings,
   deriveFeatureState,
+  evasionColor,
+  evasionName,
+  formatBytes,
   formatNumber,
   formatPercent,
   labelColor,
@@ -556,3 +484,4 @@ window.DCVScoring = {
   replayResult,
   scoreFeatures,
 };
+})();

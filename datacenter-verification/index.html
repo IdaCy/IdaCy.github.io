@@ -6,7 +6,7 @@
   <title>Datacenter Training-Run Verification Demo</title>
   <meta
     name="description"
-    content="Interactive synthetic demo for layered verification of large AI training runs on monitored GPU clusters."
+    content="Interactive catalog-v2 demo for layered verification of large AI training runs and discrepancy/evasion risk on monitored GPU clusters."
   >
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -34,7 +34,7 @@
         <div id="scene-root"></div>
         <div class="scene-hud">
           <div>
-            <span class="hud-label" title="Maximum concurrent H100e-equivalent GPUs allocated in the selected window.">Active GPUs</span>
+            <span class="hud-label" title="Maximum concurrent normalized accelerators allocated in the selected window.">Active GPUs</span>
             <strong id="hud-gpus">0</strong>
           </div>
           <div>
@@ -85,26 +85,37 @@
         </section>
 
         <section class="quick-picks" aria-label="Label example buttons">
-          <button type="button" data-example-label="0" title="Load the curated L0 example row.">Example L0</button>
-          <button type="button" data-example-label="1" title="Load the curated L1 example row.">Example L1</button>
-          <button type="button" data-example-label="2" title="Load the curated L2 example row.">Example L2</button>
-          <button type="button" data-example-label="3" title="Load the curated L3 example row.">Example L3</button>
-          <button type="button" data-example-label="4" title="Load the curated L4 example row.">Example L4</button>
-          <button type="button" id="reset-row" title="Restore evidence inputs from the selected datapoint and return to calibrated model replay.">Reset Edits</button>
+          <button type="button" data-example-label="0" title="Load a catalog-v2 L0 training-probability example.">L0</button>
+          <button type="button" data-example-label="1" title="Load a catalog-v2 L1 training-probability example.">L1</button>
+          <button type="button" data-example-label="2" title="Load a catalog-v2 L2 training-probability example.">L2</button>
+          <button type="button" data-example-label="3" title="Load a catalog-v2 L3 training-probability example.">L3</button>
+          <button type="button" data-example-label="4" title="Load a catalog-v2 L4 training-probability example.">L4</button>
+          <button type="button" data-evasion-label="clear" title="Load a clear discrepancy/evasion example.">Clear</button>
+          <button type="button" data-evasion-label="watch" title="Load a watch-level discrepancy/evasion example.">Watch</button>
+          <button type="button" data-evasion-label="suspicious" title="Load a suspicious discrepancy/evasion example.">Suspicious</button>
+          <button type="button" data-evasion-label="likely" title="Load a likely discrepancy/evasion example.">Likely Evasion</button>
+          <button type="button" id="reset-row" title="Restore evidence inputs from the selected datapoint.">Reset Edits</button>
         </section>
 
         <section class="judgement">
           <div class="judgement-main">
             <p id="state-banner" class="state-banner"></p>
-            <p id="result-mode" class="eyebrow">Calibrated model replay</p>
-            <p id="mode-detail" class="mode-detail">Selected datapoint replays the trained model export.</p>
+            <p id="result-mode" class="eyebrow">Catalog v2 datapoint</p>
+            <p id="mode-detail" class="mode-detail">Selected datapoint was generated from the public catalog rules.</p>
             <h2 id="result-label">Loading</h2>
             <div class="risk-meter" aria-label="Large training probability">
               <div id="risk-fill"></div>
             </div>
             <div class="risk-row">
-              <span title="Replay mode uses exported model probability. Edited mode uses live model inference when configured, otherwise the browser rule fallback.">Large training probability</span>
+              <span title="Probability that the evidence supports a policy-scale large training run.">Large training probability</span>
               <strong id="p-large">0%</strong>
+            </div>
+            <div class="risk-meter evasion-meter" aria-label="Discrepancy or evasion probability">
+              <div id="evasion-fill"></div>
+            </div>
+            <div class="risk-row">
+              <span title="Probability that cross-layer evidence is discrepant enough to require evasion or reconciliation review.">Discrepancy / evasion probability</span>
+              <strong id="p-evasion">0%</strong>
             </div>
           </div>
           <div class="metric-grid">
@@ -123,6 +134,10 @@
             <div title="Whether the monitored capacity and largest contiguous domain can support the illustrative policy-scale threshold.">
               <span>Policy capacity</span>
               <strong id="capacity-status">Unknown</strong>
+            </div>
+            <div title="Discrete discrepancy/evasion level from explicit catalog rules.">
+              <span>Evasion review</span>
+              <strong id="evasion-status">Clear</strong>
             </div>
           </div>
         </section>
@@ -147,6 +162,10 @@
           <div>
             <h2>Missing Layers</h2>
             <ul id="missing-list"></ul>
+          </div>
+          <div>
+            <h2>Discrepancies</h2>
+            <ul id="evasion-list"></ul>
           </div>
         </section>
       </section>
