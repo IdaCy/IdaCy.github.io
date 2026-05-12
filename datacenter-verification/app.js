@@ -28,26 +28,6 @@ const POLICY_GPU_HOURS = 512 * 24;
 
 const controlDefs = [
   {
-    key: "o1_normalized_training_compute_capacity",
-    label: "Training-capable capacity",
-    help: "Hardware-normalized accelerator capacity. Capacity is a feasibility gate, not activity evidence.",
-    type: "range",
-    min: 0,
-    max: 8192,
-    step: 64,
-    format: (value) => formatNumber(value, 0),
-  },
-  {
-    key: "o1_largest_low_latency_topology_footprint",
-    label: "Low-latency topology",
-    help: "Largest topology footprint where synchronized distributed training is plausible.",
-    type: "range",
-    min: 0,
-    max: 8192,
-    step: 64,
-    format: (value) => formatNumber(value, 0),
-  },
-  {
     key: "o1_partitioning_fraction",
     label: "Partitioning fraction",
     help: "Higher partitioning generally weakens a single monolithic training-run interpretation.",
@@ -315,6 +295,7 @@ function bindDom() {
     "capacity-status",
     "evasion-status",
     "probability-bars",
+    "site-facts-root",
     "policy-ratio",
     "controls-root",
     "evidence-list",
@@ -593,6 +574,7 @@ function renderDashboard() {
   }
 
   dom.policyRatio.textContent = `Policy ratio ${policyRatio(features).toFixed(2)}`;
+  renderSiteFacts(features, activeSite());
   renderProbabilityBars(result.probabilities);
   renderList(dom.evidenceList, result.topEvidence, false);
   renderList(dom.missingList, result.criticalMissingLayers.length ? result.criticalMissingLayers : ["none flagged"], true);
@@ -620,6 +602,44 @@ function renderProbabilityBars(probabilities) {
     row.append(name, track, value);
     dom.probabilityBars.append(row);
   });
+}
+
+function renderSiteFacts(features, site) {
+  if (!dom.siteFactsRoot) return;
+  const facts = [
+    {
+      label: "Monitored accelerator capacity",
+      value: formatNumber(features.o1_normalized_training_compute_capacity, 0),
+      detail: "Normalized accelerator count in this selected site/scope.",
+    },
+    {
+      label: "Largest connected training island",
+      value: formatNumber(features.o1_largest_low_latency_topology_footprint, 0),
+      detail: "Largest low-latency accelerator group that could support one coordinated distributed run.",
+    },
+    {
+      label: "Operator type",
+      value: pretty(site?.operator_type || "unknown"),
+      detail: "Site context selected from the synthetic datacenter profile.",
+    },
+    {
+      label: "Trust tier",
+      value: pretty(site?.trust_tier || "unknown"),
+      detail: "How strongly the synthetic site metadata is assumed to be attested or reconciled.",
+    },
+  ];
+  dom.siteFactsRoot.innerHTML = "";
+  for (const fact of facts) {
+    const item = document.createElement("div");
+    item.className = "site-fact";
+    item.title = fact.detail;
+    const label = document.createElement("span");
+    label.textContent = fact.label;
+    const value = document.createElement("strong");
+    value.textContent = fact.value;
+    item.append(label, value);
+    dom.siteFactsRoot.append(item);
+  }
 }
 
 function renderList(root, items, warnings) {
@@ -675,6 +695,7 @@ function renderEmptyState() {
   dom.capacityStatus.textContent = "n/a";
   if (dom.evasionStatus) dom.evasionStatus.textContent = "n/a";
   dom.policyRatio.textContent = "Policy ratio n/a";
+  if (dom.siteFactsRoot) dom.siteFactsRoot.innerHTML = "";
   dom.probabilityBars.innerHTML = "";
   renderList(dom.evidenceList, ["no datapoint selected"], false);
   renderList(dom.missingList, ["no datapoint selected"], true);
