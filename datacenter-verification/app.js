@@ -295,11 +295,11 @@ function syncScenarioOptions() {
     scenario: "all",
     windowLength: "all",
   });
-  const available = new Set(rows.map((row) => scenarioKey(row)));
-  const scenarios = dataset.scenarios.filter((item) => available.has(scenarioSummaryKey(item)));
+  const scenarios = scenarioOptionsFromRows(rows);
+  const available = new Set(scenarios.map((item) => item.key));
   setOptions(
     dom.scenarioSelect,
-    [["all", "All scenario families"], ...scenarios.map((item) => [scenarioSummaryKey(item), scenarioOptionLabel(item)])]
+    [["all", "All scenario variants"], ...scenarios.map((item) => [item.key, scenarioOptionLabel(item)])]
   );
   dom.scenarioSelect.value = previous === "all" || available.has(previous) ? previous : "all";
 }
@@ -780,10 +780,7 @@ function renderContextStatus(rows = filteredRows()) {
     }
   }
   if (scenario !== "all") {
-    const scenarioMeta = dataset.scenarios.find((item) => scenarioSummaryKey(item) === scenario);
-    if (scenarioMeta) {
-      parts.push(`${pretty(scenario)}: ${labelDistributionText(scenarioMeta.label_distribution)}`);
-    }
+    parts.push(`${scenarioOptionLabelFromKey(scenario)}: ${labelDistributionText(labelCounts(rows))}`);
   }
   if (!parts.length) {
     parts.push("Filters select existing synthetic datapoints; evidence edits use live inference when configured, otherwise the rule sandbox.");
@@ -1108,8 +1105,39 @@ function siteOptionLabel(site) {
   return `${site.site_id} - ${pretty(site.site_type)}, ${formatNumber(site.normalized_h100e_capacity)} H100e`;
 }
 
+function scenarioOptionsFromRows(rows) {
+  const byKey = new Map();
+  for (const row of rows) {
+    const key = scenarioKey(row);
+    let item = byKey.get(key);
+    if (!item) {
+      item = {
+        key,
+        family: scenarioFamily(row),
+        variant: scenarioVariant(row),
+        label_distribution: {},
+      };
+      byKey.set(key, item);
+    }
+    const label = String(row.predicted_label);
+    item.label_distribution[label] = (item.label_distribution[label] || 0) + 1;
+  }
+  return [...byKey.values()].sort((left, right) => {
+    const family = pretty(left.family).localeCompare(pretty(right.family));
+    if (family !== 0) return family;
+    return pretty(left.variant).localeCompare(pretty(right.variant));
+  });
+}
+
 function scenarioOptionLabel(item) {
-  return pretty(scenarioSummaryKey(item));
+  const label = scenarioDisplayParts(item.family, item.variant);
+  const distribution = labelDistributionText(item.label_distribution);
+  return distribution ? `${label} - ${distribution}` : label;
+}
+
+function scenarioOptionLabelFromKey(key) {
+  const [family, variant = ""] = splitScenarioKey(key);
+  return scenarioDisplayParts(family, variant);
 }
 
 function rowOptionLabel(row) {
@@ -1128,16 +1156,37 @@ function sourceRowSummary(row) {
 }
 
 function scenarioKey(row) {
+  return [scenarioFamily(row), scenarioVariant(row)].map(encodeURIComponent).join("::");
+}
+
+function scenarioFamily(row) {
   return row.scenario_family || row.latent_workload_class || "unknown";
 }
 
-function scenarioSummaryKey(item) {
-  return item.scenario_family || item.scenario || "unknown";
+function scenarioVariant(row) {
+  return row.scenario_variant || "";
+}
+
+function splitScenarioKey(key) {
+  const [family = "unknown", variant = ""] = String(key || "").split("::").map(decodeURIComponent);
+  return [family, variant];
 }
 
 function scenarioDisplay(row) {
-  const family = pretty(scenarioKey(row));
-  return row.scenario_variant ? `${family} (${pretty(row.scenario_variant)})` : family;
+  return scenarioDisplayParts(scenarioFamily(row), scenarioVariant(row));
+}
+
+function scenarioDisplayParts(family, variant) {
+  const familyLabel = pretty(family);
+  return variant ? `${familyLabel} (${pretty(variant)})` : familyLabel;
+}
+
+function labelCounts(rows) {
+  return rows.reduce((counts, row) => {
+    const label = String(row.predicted_label);
+    counts[label] = (counts[label] || 0) + 1;
+    return counts;
+  }, {});
 }
 
 function labelDistributionText(distribution = {}) {
@@ -1149,7 +1198,7 @@ function labelDistributionText(distribution = {}) {
 
 function filterSummary() {
   const site = dom.siteSelect.value === "all" ? "all sites" : dom.siteSelect.value;
-  const scenario = dom.scenarioSelect.value === "all" ? "all scenario families" : pretty(dom.scenarioSelect.value);
+  const scenario = dom.scenarioSelect.value === "all" ? "all scenario variants" : scenarioOptionLabelFromKey(dom.scenarioSelect.value);
   const windowLength = dom.windowSelect.value === "all"
     ? "all windows"
     : WINDOW_LABELS.get(Number(dom.windowSelect.value)) || `${dom.windowSelect.value}s`;
