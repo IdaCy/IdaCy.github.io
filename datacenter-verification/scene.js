@@ -7,13 +7,12 @@ class DatacenterScene {
   constructor(container) {
     this.container = container;
     this.scene = new THREE.Scene();
-    this.scene.background = null;
+    this.scene.background = new THREE.Color(0xdfe3e0);
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
     this.camera.position.set(8, 5.3, 8);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
-    this.createFallbackLayer();
     this.container.appendChild(this.renderer.domElement);
 
     this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
@@ -41,19 +40,6 @@ class DatacenterScene {
     this.resize();
     window.addEventListener("resize", () => this.resize());
     this.animate();
-  }
-
-  createFallbackLayer() {
-    this.fallbackRacks = [];
-    this.fallback = document.createElement("div");
-    this.fallback.className = "scene-fallback";
-    for (let index = 0; index < RACK_COUNT; index += 1) {
-      const rack = document.createElement("i");
-      rack.className = "fallback-rack";
-      this.fallbackRacks.push(rack);
-      this.fallback.append(rack);
-    }
-    this.container.append(this.fallback);
   }
 
   createLights() {
@@ -218,32 +204,12 @@ class DatacenterScene {
       activityCap.position.set(rack.position.x, rack.position.y + rack.scale.y * 0.62 + 0.045, rack.position.z);
     });
 
-    this.updateFallback(activeRacks, { gpuUtil, fabric, power, checkpoint, coverage, result });
-
     this.powerPlane.material.opacity = power * 0.24;
     this.integrityFrame.material.opacity = result.integrityWarning || coverage < 0.8
       ? 0.36 + clamp(result.evasionProbability || 0) * 0.52
       : 0;
     this.updateFabricLines(activeRacks, fabric);
     this.updateStorageMarkers(checkpoint, result.label);
-  }
-
-  updateFallback(activeRacks, state) {
-    if (!this.fallback) return;
-    this.fallback.style.setProperty("--fabric-opacity", state.fabric.toFixed(3));
-    this.fallback.style.setProperty("--power-opacity", (state.power * 0.46).toFixed(3));
-    this.fallback.style.setProperty(
-      "--integrity-opacity",
-      (state.result.integrityWarning || state.coverage < 0.8 ? 0.25 + clamp(state.result.evasionProbability || 0) * 0.55 : 0).toFixed(3)
-    );
-    this.fallback.classList.toggle("fabric-strong", state.fabric > 0.25);
-    this.fallback.classList.toggle("storage-active", state.checkpoint > 0.35);
-    this.fallbackRacks.forEach((rack, index) => {
-      const active = index < activeRacks;
-      rack.classList.toggle("active", active);
-      rack.style.setProperty("--rack-activity", active ? state.gpuUtil.toFixed(3) : "0");
-      rack.style.setProperty("--rack-scale", active ? (0.8 + state.gpuUtil * 0.34).toFixed(3) : "0.8");
-    });
   }
 
   updateFabricLines(activeRacks, fabric) {
