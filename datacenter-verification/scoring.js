@@ -197,12 +197,19 @@ function scoreFeatures(inputFeatures = {}, site = null) {
     checkpointScore = Math.max(checkpointScore, 0.75);
   }
 
+  const allocationCountScore = ramp(features.o2_allocated_accelerator_count, 64, 512);
+  const allocationDurationScore = ramp(features.o2_allocation_duration, 1, 72);
+  const allocationDurationGate = ramp(features.o2_allocation_duration, 0.05, 1);
+  const allocationCountGate = ramp(features.o2_allocated_accelerator_count, 16, 64);
+  const gpuBusyScore = ramp(features.o4_gpu_busy_percent, 25, 85);
+  const gpuBusyGate = ramp(features.o4_gpu_busy_percent, 1, 25);
+
   const scores = {
     capacity: features.capacity_possible ? 1 : 0,
     allocation: Math.max(
-      ramp(features.o2_allocated_accelerator_count, 64, 512),
       ramp(policyRatio, 0.15, 1),
-      ramp(features.o2_allocation_duration, 1, 72)
+      allocationCountScore * allocationDurationGate,
+      allocationDurationScore * allocationCountGate
     ),
     cloud: Math.max(
       ramp(features.o3_batch_provisioning_event_size, 64, 512),
@@ -210,10 +217,13 @@ function scoreFeatures(inputFeatures = {}, site = null) {
         clamp(features.o3_training_instance_type_fraction)
     ),
     gpu:
-      ramp(features.o4_gpu_busy_percent, 25, 85) * 0.35 +
-      ramp(features.o4_sm_tensor_core_active_percent, 20, 85) * 0.25 +
-      ramp(features.o4_gpu_power_draw_or_fraction, 0.25, 0.85) * 0.25 +
-      ramp(features.o4_hbm_memory_used, 0.25, 0.85) * 0.15,
+      gpuBusyScore * 0.35 +
+      gpuBusyGate *
+        (
+          ramp(features.o4_sm_tensor_core_active_percent, 20, 85) * 0.25 +
+          ramp(features.o4_gpu_power_draw_or_fraction, 0.25, 0.85) * 0.25 +
+          ramp(features.o4_hbm_memory_used, 0.25, 0.85) * 0.15
+        ),
     fabric:
       ramp(features.o7_scaleout_port_utilization, 15, 70) * 0.25 +
       ramp(features.o7_synchronized_fabric_footprint, 64, 512) * 0.35 +
@@ -263,13 +273,6 @@ function scoreFeatures(inputFeatures = {}, site = null) {
     trainingProbability < 0.12 ? 0 :
     trainingProbability < 0.3 ? 1 :
     trainingProbability < 0.55 ? 2 : 3;
-  if (
-    trainingProbability >= 0.78 &&
-    (scores.ml_logs > 0.8 || (scores.allocation > 0.75 && scores.gpu > 0.65 && scores.fabric > 0.65 && scores.physical > 0.55 && scores.storage > 0.45))
-  ) {
-    label = 4;
-  }
-  label = Math.min(label, labelCap);
 
   const triggered = discrepancyRules(features, scores, {
     capacity,
@@ -282,6 +285,22 @@ function scoreFeatures(inputFeatures = {}, site = null) {
   });
   const evasionProbability = evasionProbabilityFromRules(triggered);
   const evasionLabel = evasionProbability < 0.18 ? "clear" : evasionProbability < 0.45 ? "watch" : evasionProbability < 0.7 ? "suspicious" : "likely";
+  const strongCrossLayer =
+    Math.max(scores.allocation, scores.cloud) > 0.75 &&
+    scores.gpu > 0.65 &&
+    scores.fabric > 0.65 &&
+    scores.physical > 0.55 &&
+    scores.storage > 0.45;
+  const semanticConfirmed =
+    scores.ml_logs > 0.8 &&
+    scores.runtime > 0.5 &&
+    Math.max(scores.allocation, scores.cloud) > 0.5 &&
+    scores.gpu > 0.5 &&
+    scores.fabric > 0.5;
+  if (trainingProbability >= 0.78 && evasionProbability < 0.45 && (strongCrossLayer || semanticConfirmed)) {
+    label = 4;
+  }
+  label = Math.min(label, labelCap);
   const noRunConfidence = clamp((1 - trainingProbability) * scores.coverage * (1 - evasionProbability * 0.75));
   const topEvidence = topTrainingEvidence(scores, { falsePositiveRuntime });
   const criticalMissingLayers = missingLayerWarnings(features, scores, triggered);

@@ -380,11 +380,30 @@ def evaluate(features: dict[str, Any], site: Site) -> dict[str, Any]:
     false_positive_runtime = any(token in runtime for token in ["mpi", "vllm", "tensorrt", "etl", "burn", "nccl"])
     semantic_logs = features["o12_loss_optimizer_checkpoint_metadata"] != "absent" or features["o12_declared_model_parameter_count"] > 1e10
 
+    allocation_count_score = ramp(features["o2_allocated_accelerator_count"], 64, 512)
+    allocation_duration_score = ramp(features["o2_allocation_duration"], 1, 72)
+    allocation_duration_gate = ramp(features["o2_allocation_duration"], 0.05, 1)
+    allocation_count_gate = ramp(features["o2_allocated_accelerator_count"], 16, 64)
+    gpu_busy_score = ramp(features["o4_gpu_busy_percent"], 25, 85)
+    gpu_busy_gate = ramp(features["o4_gpu_busy_percent"], 1, 25)
+
     scores = {
         "capacity": 1.0 if capacity_possible else 0.0,
-        "allocation": max(ramp(features["o2_allocated_accelerator_count"], 64, 512), ramp(policy_ratio, 0.15, 1.0), ramp(features["o2_allocation_duration"], 1, 72)),
+        "allocation": max(
+            ramp(policy_ratio, 0.15, 1.0),
+            allocation_count_score * allocation_duration_gate,
+            allocation_duration_score * allocation_count_gate,
+        ),
         "cloud": max(ramp(features["o3_batch_provisioning_event_size"], 64, 512), ramp(features["o3_capacity_reservation_block_duration"], 0.25, 7) * features["o3_training_instance_type_fraction"]),
-        "gpu": (ramp(features["o4_gpu_busy_percent"], 25, 85) * 0.35 + ramp(features["o4_sm_tensor_core_active_percent"], 20, 85) * 0.25 + ramp(features["o4_gpu_power_draw_or_fraction"], 0.25, 0.85) * 0.25 + ramp(features["o4_hbm_memory_used"], 0.25, 0.85) * 0.15),
+        "gpu": (
+            gpu_busy_score * 0.35
+            + gpu_busy_gate
+            * (
+                ramp(features["o4_sm_tensor_core_active_percent"], 20, 85) * 0.25
+                + ramp(features["o4_gpu_power_draw_or_fraction"], 0.25, 0.85) * 0.25
+                + ramp(features["o4_hbm_memory_used"], 0.25, 0.85) * 0.15
+            )
+        ),
         "fabric": (ramp(features["o7_scaleout_port_utilization"], 15, 70) * 0.25 + ramp(features["o7_synchronized_fabric_footprint"], 64, 512) * 0.35 + fabric_cadence * 0.25 + ramp(features["o6_nvlink_nvswitch_link_utilization"], 15, 75) * 0.15),
         "physical": max(ramp(rack_power_fraction, 0.25, 0.75), ramp(features["o9_gpu_hbm_temperature_celsius"], 45, 78) * 0.7),
         "storage": checkpoint_score * 0.7 + ramp(features["o11_read_write_operation_pattern"], 0.4, 1.1) * 0.3,
@@ -419,9 +438,6 @@ def evaluate(features: dict[str, Any], site: Site) -> dict[str, Any]:
         label_cap = min(label_cap, 1)
         caps.append("weak_activity_cap")
     label = 0 if training_probability < 0.12 else 1 if training_probability < 0.3 else 2 if training_probability < 0.55 else 3
-    if training_probability >= 0.78 and (scores["ml_logs"] > 0.8 or (scores["allocation"] > 0.75 and scores["gpu"] > 0.65 and scores["fabric"] > 0.65 and scores["physical"] > 0.55 and scores["storage"] > 0.45)):
-        label = 4
-    label = min(label, label_cap)
 
     triggered = []
     def add(rule: str, severity: float) -> None:
@@ -467,6 +483,23 @@ def evaluate(features: dict[str, Any], site: Site) -> dict[str, Any]:
         evasion_probability = 1 - (1 - evasion_probability) * (1 - item["severity_weight"] * 0.58)
     evasion_probability = clamp(evasion_probability)
     evasion_label = "clear" if evasion_probability < 0.18 else "watch" if evasion_probability < 0.45 else "suspicious" if evasion_probability < 0.7 else "likely"
+    strong_cross_layer = (
+        max(scores["allocation"], scores["cloud"]) > 0.75
+        and scores["gpu"] > 0.65
+        and scores["fabric"] > 0.65
+        and scores["physical"] > 0.55
+        and scores["storage"] > 0.45
+    )
+    semantic_confirmed = (
+        scores["ml_logs"] > 0.8
+        and scores["runtime"] > 0.5
+        and max(scores["allocation"], scores["cloud"]) > 0.5
+        and scores["gpu"] > 0.5
+        and scores["fabric"] > 0.5
+    )
+    if training_probability >= 0.78 and evasion_probability < 0.45 and (strong_cross_layer or semantic_confirmed):
+        label = 4
+    label = min(label, label_cap)
     no_run_confidence = clamp((1 - training_probability) * scores["coverage"] * (1 - evasion_probability * 0.75))
     evidence = []
     if scores["allocation"] > 0.5:
