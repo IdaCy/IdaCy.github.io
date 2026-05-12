@@ -29,6 +29,10 @@ const WINDOW_LABELS = new Map([
   [21600, "6 hours"],
   [86400, "1 day"],
 ]);
+const NO_ACTIVE_ALLOCATION_KEYS = new Set([
+  "o2_max_concurrent_normalized_gpus",
+  "o2_allocation_duration_hours",
+]);
 
 const controlDefs = [
   {
@@ -186,6 +190,7 @@ let dataset = null;
 let scene = null;
 let activeRow = null;
 let activeFeatures = {};
+let lastActiveAllocationFeatures = null;
 let sandboxDirty = false;
 let inferenceApiUrl = "";
 let editRevision = 0;
@@ -339,6 +344,7 @@ function renderRowOptions(options = {}) {
     setControlsDisabled(true);
     dom.resetRow.disabled = true;
     activeRow = null;
+    lastActiveAllocationFeatures = null;
     sandboxDirty = false;
     renderEmptyState();
     return;
@@ -403,6 +409,7 @@ function setActiveRow(row, options = {}) {
   if (options.resetFeatures) {
     clearLiveInference();
     activeFeatures = deriveFeatureState(clone(row.features));
+    lastActiveAllocationFeatures = null;
     sandboxDirty = false;
     editRevision += 1;
     syncControls();
@@ -472,7 +479,7 @@ function handleControlEdit(def, input) {
     updateControlValue(def);
     return;
   }
-  applyControlValue(def, input, nextValue);
+  applyControlValue(def, input, nextValue, clone(activeFeatures));
   sandboxDirty = true;
   editRevision += 1;
   liveInference.error = "";
@@ -511,12 +518,74 @@ function controlValuesEqual(left, right) {
   return String(left ?? "") === String(right ?? "");
 }
 
-function applyControlValue(def, input, value = controlInputValue(def, input)) {
+function controlDefForKey(key) {
+  return controlDefs.find((def) => def.key === key);
+}
+
+function clampToControlRange(key, value) {
+  const def = controlDefForKey(key);
+  if (!def || def.type !== "range") return value;
+  const min = asNumber(def.min);
+  const max = asNumber(def.max);
+  const step = asNumber(def.step, 1);
+  const clamped = Math.min(max, Math.max(min, asNumber(value)));
+  if (step <= 0) return clamped;
+  const stepped = min + Math.floor((clamped - min) / step) * step;
+  return Math.min(max, Math.max(min, stepped));
+}
+
+function positiveControlValue(key, sourceValue, fallback) {
+  const sourceNumber = asNumber(sourceValue);
+  const value = sourceNumber > 0 ? sourceNumber : fallback;
+  return clampToControlRange(key, Math.max(fallback, value));
+}
+
+function applyControlValue(def, input, value = controlInputValue(def, input), previousFeatures = null) {
+  captureActiveAllocationSnapshot(def.key, value, previousFeatures);
   activeFeatures[def.key] = value;
+  restoreFromNoActiveAllocation(def.key, value);
   applyCoherentSideEffects(def.key);
   updateCoverageFields(def.key);
   activeFeatures = deriveFeatureState(activeFeatures);
   syncDerivedControlValues();
+}
+
+function captureActiveAllocationSnapshot(changedKey, value, previousFeatures) {
+  if (!NO_ACTIVE_ALLOCATION_KEYS.has(changedKey) || asNumber(value) > 0) return;
+  const source = previousFeatures || activeFeatures;
+  if (
+    asNumber(source.o2_max_concurrent_normalized_gpus) > 0 &&
+    asNumber(source.o2_allocation_duration_hours) > 0
+  ) {
+    lastActiveAllocationFeatures = clone(source);
+  }
+}
+
+function restoreFromNoActiveAllocation(changedKey, value) {
+  if (!NO_ACTIVE_ALLOCATION_KEYS.has(changedKey) || asNumber(value) <= 0) return;
+  const isPinnedAtZero =
+    asNumber(activeFeatures.o2_max_concurrent_normalized_gpus) <= 0 ||
+    asNumber(activeFeatures.o2_allocation_duration_hours) <= 0;
+  if (!isPinnedAtZero) return;
+
+  const source = lastActiveAllocationFeatures || activeRow?.features || {};
+  activeFeatures = { ...activeFeatures, ...clone(source) };
+  activeFeatures[changedKey] = value;
+  if (changedKey === "o2_allocation_duration_hours") {
+    activeFeatures.o2_max_concurrent_normalized_gpus = positiveControlValue(
+      "o2_max_concurrent_normalized_gpus",
+      source.o2_max_concurrent_normalized_gpus,
+      16
+    );
+  }
+  if (changedKey === "o2_max_concurrent_normalized_gpus") {
+    activeFeatures.o2_allocation_duration_hours = positiveControlValue(
+      "o2_allocation_duration_hours",
+      source.o2_allocation_duration_hours,
+      1
+    );
+  }
+  lastActiveAllocationFeatures = null;
 }
 
 function syncDerivedControlValues() {
