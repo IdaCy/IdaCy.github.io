@@ -63,15 +63,14 @@
 
       <section class="form-card" aria-labelledby="risk-title">
         <h2 id="risk-title">What percentage of probability do you give each for extinction-level threat?</h2>
-        <div class="range-scale slider-scale" aria-hidden="true">
-          <span>0</span>
-          <span>100</span>
-        </div>
 
         <div class="slider-list">
           <label class="slider-row">
             <span>New pandemic</span>
-            <input type="range" name="newPandemic" min="0" max="100" step="10" value="50" data-output="newPandemicOut">
+            <span class="slider-control">
+              <span class="range-scale top-slider-scale" aria-hidden="true"><span>0</span><span>100</span></span>
+              <input type="range" name="newPandemic" min="0" max="100" step="10" value="50" data-output="newPandemicOut">
+            </span>
             <output id="newPandemicOut">50</output>
           </label>
           <label class="slider-row">

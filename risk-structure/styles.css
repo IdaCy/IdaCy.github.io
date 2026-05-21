@@ -221,25 +221,6 @@ select:focus {
   font-size: 13px;
 }
 
-.slider-scale {
-  display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(180px, 2fr) 42px;
-  gap: 16px;
-  margin-top: 6px;
-  margin-bottom: -6px;
-  line-height: 1;
-}
-
-.slider-scale span:first-child {
-  grid-column: 2;
-}
-
-.slider-scale span:last-child {
-  grid-column: 2;
-  justify-self: end;
-  text-align: right;
-}
-
 .slider-list {
   display: grid;
   gap: 17px;
@@ -262,11 +243,23 @@ select:focus {
   grid-template-columns: minmax(140px, 1fr) minmax(180px, 2fr) 42px;
 }
 
+.slider-control {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.top-slider-scale {
+  line-height: 1;
+  margin-bottom: -2px;
+}
+
 .inline-text-input {
   min-height: 38px;
 }
 
 input[type="range"] {
+  margin: 0;
   width: 100%;
   accent-color: var(--accent);
 }
@@ -528,7 +521,6 @@ canvas {
 
   .slider-row,
   .other-risk-row,
-  .slider-scale,
   .year-question-row,
   .bar-row,
   .compact-bars .bar-row {
@@ -539,20 +531,6 @@ canvas {
   output,
   .bar-value {
     text-align: left;
-  }
-
-  .slider-scale span:first-child,
-  .slider-scale span:last-child {
-    grid-column: auto;
-    text-align: left;
-  }
-
-  .slider-scale {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .slider-scale span:last-child {
-    text-align: right;
   }
 
   .single-slider {
