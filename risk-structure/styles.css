@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  --page: #07110d;
+  --page: #00150f;
   --card: #fbfcf8;
   --text: #1d211f;
   --muted: #66706b;
@@ -234,21 +234,25 @@ output {
   text-align: right;
 }
 
-.custom-probability {
-  grid-template-columns: auto minmax(58px, 76px) 1fr 118px;
-  align-items: end;
-  column-gap: 10px;
-}
-
-.custom-probability .question-text {
-  line-height: 44px;
-}
-
 .year-question-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 118px;
   gap: 18px;
   align-items: end;
+}
+
+.custom-probability-question {
+  line-height: 1.8;
+}
+
+input.probability-inline-input {
+  display: inline-block;
+  width: 68px;
+  min-height: 34px;
+  margin: 0 4px;
+  padding: 3px 4px 2px;
+  text-align: center;
+  vertical-align: baseline;
 }
 
 .year-select {
@@ -486,18 +490,13 @@ canvas {
     grid-template-columns: 1fr 42px;
   }
 
-  .custom-probability {
-    grid-template-columns: 1fr;
-    align-items: stretch;
-  }
-
   .year-select {
     width: 100%;
     min-width: 0;
   }
 
-  .custom-probability .question-text {
-    line-height: 1.45;
+  .custom-probability-question {
+    line-height: 1.7;
   }
 
   .summary-grid,
