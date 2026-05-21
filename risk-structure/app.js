@@ -266,7 +266,7 @@
     container.innerHTML = "";
     riskDefinitions.forEach(function (definition) {
       var value = Math.round((stats.riskAverages[definition.key] || 0) * 10) / 10;
-      container.appendChild(createBarRow(definition.label, value, 10));
+      container.appendChild(createBarRow(definition.label, value, 100));
     });
   }
 
@@ -294,8 +294,8 @@
   function renderOutlookStats(stats) {
     var container = document.getElementById("outlook-stats");
     container.innerHTML = "";
-    container.appendChild(createBarRow("Importance of contributing", roundOne(stats.averageImportance), 10));
-    container.appendChild(createBarRow("Optimism", roundOne(stats.averageOptimism), 10));
+    container.appendChild(createBarRow("Importance of contributing", roundOne(stats.averageImportance), 100));
+    container.appendChild(createBarRow("Optimism", roundOne(stats.averageOptimism), 100));
   }
 
   function createBarRow(label, value, max, countMode) {

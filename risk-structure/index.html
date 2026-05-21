@@ -65,39 +65,39 @@
         <h2 id="risk-title">What percentage of probability do you think humans are facing extinction-level threat from AI by 2030?</h2>
         <div class="range-scale slider-scale" aria-hidden="true">
           <span>0</span>
-          <span>10</span>
+          <span>100</span>
         </div>
 
         <div class="slider-list">
           <label class="slider-row">
             <span>New pandemic</span>
-            <input type="range" name="newPandemic" min="0" max="10" value="5" data-output="newPandemicOut">
-            <output id="newPandemicOut">5</output>
+            <input type="range" name="newPandemic" min="0" max="100" step="10" value="50" data-output="newPandemicOut">
+            <output id="newPandemicOut">50</output>
           </label>
           <label class="slider-row">
             <span>Loss of control to AI</span>
-            <input type="range" name="lossControlAI" min="0" max="10" value="5" data-output="lossControlAIOut">
-            <output id="lossControlAIOut">5</output>
+            <input type="range" name="lossControlAI" min="0" max="100" step="10" value="50" data-output="lossControlAIOut">
+            <output id="lossControlAIOut">50</output>
           </label>
           <label class="slider-row">
             <span>AI Misuse</span>
-            <input type="range" name="aiMisuse" min="0" max="10" value="5" data-output="aiMisuseOut">
-            <output id="aiMisuseOut">5</output>
+            <input type="range" name="aiMisuse" min="0" max="100" step="10" value="50" data-output="aiMisuseOut">
+            <output id="aiMisuseOut">50</output>
           </label>
           <label class="slider-row">
             <span>Climate change</span>
-            <input type="range" name="climateChange" min="0" max="10" value="5" data-output="climateChangeOut">
-            <output id="climateChangeOut">5</output>
+            <input type="range" name="climateChange" min="0" max="100" step="10" value="50" data-output="climateChangeOut">
+            <output id="climateChangeOut">50</output>
           </label>
           <label class="slider-row">
             <span>Nuclear war</span>
-            <input type="range" name="nuclearWar" min="0" max="10" value="5" data-output="nuclearWarOut">
-            <output id="nuclearWarOut">5</output>
+            <input type="range" name="nuclearWar" min="0" max="100" step="10" value="50" data-output="nuclearWarOut">
+            <output id="nuclearWarOut">50</output>
           </label>
           <div class="slider-row other-risk-row">
             <input class="inline-text-input" type="text" name="otherRiskLabel" placeholder="Other highest risk (optional)" aria-label="Other highest risk">
-            <input type="range" name="otherHighestRisk" min="0" max="10" value="5" data-output="otherHighestRiskOut" aria-label="Other highest risk level">
-            <output id="otherHighestRiskOut">5</output>
+            <input type="range" name="otherHighestRisk" min="0" max="100" step="10" value="50" data-output="otherHighestRiskOut" aria-label="Other highest risk level">
+            <output id="otherHighestRiskOut">50</output>
           </div>
         </div>
       </section>
@@ -124,10 +124,10 @@
       <section class="form-card other-card" aria-label="Additional risk questions">
         <label class="field-group">
           <span class="question-text">How important is it for you to contribute to lowering risk of catastrophic AI outcomes?</span>
-          <span class="range-scale" aria-hidden="true"><span>0</span><span>10</span></span>
+          <span class="range-scale" aria-hidden="true"><span>0</span><span>100</span></span>
           <span class="single-slider">
-            <input type="range" name="importanceLowerRisk" min="0" max="10" value="5" data-output="importanceLowerRiskOut">
-            <output id="importanceLowerRiskOut">5</output>
+            <input type="range" name="importanceLowerRisk" min="0" max="100" step="10" value="50" data-output="importanceLowerRiskOut">
+            <output id="importanceLowerRiskOut">50</output>
           </span>
         </label>
 
@@ -147,10 +147,10 @@
 
         <label class="field-group">
           <span class="question-text">How optimistic are you about us being successful in avoiding large AI risks?</span>
-          <span class="range-scale" aria-hidden="true"><span>0</span><span>10</span></span>
+          <span class="range-scale" aria-hidden="true"><span>0</span><span>100</span></span>
           <span class="single-slider">
-            <input type="range" name="optimismAvoidRisks" min="0" max="10" value="5" data-output="optimismAvoidRisksOut">
-            <output id="optimismAvoidRisksOut">5</output>
+            <input type="range" name="optimismAvoidRisks" min="0" max="100" step="10" value="50" data-output="optimismAvoidRisksOut">
+            <output id="optimismAvoidRisksOut">50</output>
           </span>
         </label>
       </section>
