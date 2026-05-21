@@ -23,3 +23,5 @@ For shared results and durable complete records:
 13. Commit and push the updated `config.js` with the page.
 
 The Apps Script stores both flattened columns and the complete raw JSON record for every submission. The public stats response excludes the background questions.
+
+The unlinked `../risk-structure-breakdown/` page uses the same Apps Script deployment and requires the latest `google-apps-script.js`, including the `breakdownStats` action. If that page shows a redeploy warning, paste the latest script into Apps Script and create a new web app deployment version.

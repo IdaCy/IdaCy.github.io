@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Risk Structure Statistics</title>
+  <link rel="stylesheet" href="../risk-structure/styles.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="form-card title-card">
+      <h1>Risk Structure Statistics</h1>
+      <p class="privacy-note">Broken-down anonymized statistics.</p>
+    </section>
+
+    <section class="form-card controls-card" aria-label="Statistic filters">
+      <label class="filter-control" for="group-type">
+        <span class="question-text">Show results</span>
+        <select id="group-type">
+          <option value="all">Across all responses</option>
+          <option value="organizations">For one organization</option>
+          <option value="startYears">For one start year</option>
+          <option value="startMonths">For one start month</option>
+        </select>
+      </label>
+      <label class="filter-control" for="group-value" id="group-value-label" hidden>
+        <span class="question-text">Group</span>
+        <select id="group-value"></select>
+      </label>
+      <p id="load-status" class="privacy-note">Loading statistics...</p>
+    </section>
+
+    <section id="results" class="results-shell" hidden aria-live="polite">
+      <section class="form-card title-card results-title">
+        <h2 id="selected-group-title">Results</h2>
+        <p class="privacy-note"><span id="response-count">0</span> responses in this view</p>
+      </section>
+
+      <section class="form-card stats-card">
+        <div class="stats-header">
+          <h3>AI timeline</h3>
+        </div>
+        <canvas id="timeline-chart" width="840" height="360" aria-label="Expected probability over time"></canvas>
+        <div id="timeline-summary" class="summary-grid"></div>
+      </section>
+
+      <section class="form-card stats-card">
+        <h3>Extinction-level threat by 2030</h3>
+        <div id="risk-bars" class="bar-list"></div>
+      </section>
+
+      <section class="form-card stats-card two-column-stats">
+        <div>
+          <h3>Best bet</h3>
+          <div id="best-bet-bars" class="bar-list compact-bars"></div>
+        </div>
+        <div>
+          <h3>Outlook</h3>
+          <div id="outlook-stats" class="outlook-list"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="../risk-structure/config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

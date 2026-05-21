@@ -55,6 +55,13 @@ function doGet(e) {
     });
   }
 
+  if (action === "breakdownStats") {
+    return jsonResponse({
+      success: true,
+      breakdown: computeBreakdownStats(readRecords())
+    });
+  }
+
   return jsonResponse({
     success: false,
     error: "Unknown action"
@@ -252,6 +259,70 @@ function computeStats(records) {
   return stats;
 }
 
+function computeBreakdownStats(records) {
+  var cleanRecords = records.filter(function (record) {
+    return record && record.perceivedRisks && record.aiTimeline && record.bestBet;
+  });
+
+  return {
+    all: makeStatsGroup("all", "All responses", cleanRecords),
+    organizations: groupRecords(cleanRecords, function (record) {
+      return normalizeOrganization(record.organization);
+    }),
+    startYears: groupRecords(cleanRecords, function (record) {
+      return String(record.start && record.start.year ? record.start.year : "").trim();
+    }),
+    startMonths: groupRecords(cleanRecords, function (record) {
+      return String(record.start && record.start.month ? record.start.month : "").trim();
+    }, monthSortIndex)
+  };
+}
+
+function groupRecords(records, getKey, sortIndex) {
+  var grouped = {};
+  records.forEach(function (record) {
+    var key = getKey(record);
+    if (!key) return;
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(record);
+  });
+
+  return Object.keys(grouped).map(function (key) {
+    return makeStatsGroup(key, key, grouped[key]);
+  }).sort(function (a, b) {
+    if (sortIndex) {
+      return sortIndex(a.value) - sortIndex(b.value);
+    }
+    return a.label.localeCompare(b.label);
+  });
+}
+
+function makeStatsGroup(value, label, records) {
+  return {
+    value: value,
+    label: label,
+    count: records.length,
+    stats: computeStats(records)
+  };
+}
+
+function normalizeOrganization(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function monthSortIndex(value) {
+  var months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  var index = months.indexOf(value);
+  return index === -1 ? 99 : index;
+}
+
 function computeTimeline(records) {
   var currentYear = 2026;
   var series = records.map(recordToTimelineSeries).filter(function (entry) {
@@ -305,7 +376,7 @@ function recordToTimelineSeries(record) {
     return a.year - b.year;
   });
 
-  return { id: record.id, points: points };
+  return { points: points };
 }
 
 function interpolate(points, year) {
