@@ -57,7 +57,8 @@ function doGet(e) {
       supportsOtherHighestRiskLabel: true,
       supportsBestBetRanking: true,
       supportsPartialBestBetRanking: true,
-      storesBlankOrganizationAsNotFilled: true
+      storesBlankOrganizationAsNotFilled: true,
+      supportsTooltipValueLists: true
     });
   }
 
@@ -315,6 +316,7 @@ function computeStats(records) {
     timeline: computeTimeline(cleanRecords),
     bestBetCounts: {},
     otherRiskLabels: collectOtherRiskLabels(cleanRecords),
+    valueLists: collectValueLists(cleanRecords),
     averageImportance: average(cleanRecords.map(function (record) {
       return record.importanceLowerRisk;
     })),
@@ -346,6 +348,90 @@ function computeStats(records) {
   });
 
   return stats;
+}
+
+function collectValueLists(records) {
+  var lists = {
+    risks: {},
+    timeline: {
+      p10Years: [],
+      p50Years: [],
+      customPoints: [],
+      responseLines: []
+    },
+    bestBetTopChoices: [],
+    bestBetRanks: {},
+    importanceLowerRisk: [],
+    optimismAvoidRisks: []
+  };
+
+  RISK_DEFINITIONS.forEach(function (definition) {
+    lists.risks[definition.key] = [];
+  });
+
+  BEST_BET_KEYS.forEach(function (key) {
+    lists.bestBetRanks[key] = [];
+  });
+
+  records.forEach(function (record) {
+    RISK_DEFINITIONS.forEach(function (definition) {
+      var value = definition.key === "otherHighestRisk"
+        ? record.perceivedRisks.otherHighestRisk.score
+        : record.perceivedRisks[definition.key];
+      if (isFiniteNumber(value)) lists.risks[definition.key].push(value);
+    });
+
+    appendTimelineValues(lists.timeline, record.aiTimeline || {});
+    appendBestBetValues(lists, record.bestBet || {});
+
+    if (isFiniteNumber(record.importanceLowerRisk)) {
+      lists.importanceLowerRisk.push(record.importanceLowerRisk);
+    }
+    if (isFiniteNumber(record.optimismAvoidRisks)) {
+      lists.optimismAvoidRisks.push(record.optimismAvoidRisks);
+    }
+  });
+
+  return lists;
+}
+
+function appendTimelineValues(timelineLists, timeline) {
+  var responseLine = [];
+
+  if (isFiniteNumber(timeline.p10Year)) {
+    timelineLists.p10Years.push(timeline.p10Year);
+    responseLine.push("10%: " + String(timeline.p10Year));
+  }
+  if (isFiniteNumber(timeline.p50Year)) {
+    timelineLists.p50Years.push(timeline.p50Year);
+    responseLine.push("50%: " + String(timeline.p50Year));
+  }
+  if (isFiniteNumber(timeline.customProbability) && isFiniteNumber(timeline.customYear)) {
+    timelineLists.customPoints.push(String(timeline.customProbability) + "% in " + String(timeline.customYear));
+    responseLine.push(String(timeline.customProbability) + "%: " + String(timeline.customYear));
+  }
+
+  if (responseLine.length) {
+    timelineLists.responseLines.push(responseLine.join(", "));
+  }
+}
+
+function appendBestBetValues(lists, bestBet) {
+  var topChoice = getTopBestBetOption({ bestBet: bestBet });
+  var ranking = Array.isArray(bestBet.ranking) ? bestBet.ranking : [];
+
+  if (topChoice) {
+    lists.bestBetTopChoices.push(topChoice);
+  }
+
+  ranking.forEach(function (entry) {
+    var option = String(entry && entry.option ? entry.option : "");
+    var rank = toNumber(entry && entry.rank);
+
+    if (!option || !isFiniteNumber(rank)) return;
+    if (!lists.bestBetRanks[option]) lists.bestBetRanks[option] = [];
+    lists.bestBetRanks[option].push(rank);
+  });
 }
 
 function normalizeBestBetRanking(bestBet) {

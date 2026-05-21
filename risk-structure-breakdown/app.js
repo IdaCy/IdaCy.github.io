@@ -33,12 +33,19 @@
   var groupValueLabel = document.getElementById("group-value-label");
   var loadStatus = document.getElementById("load-status");
   var results = document.getElementById("results");
+  var tooltip = null;
 
   initialize();
 
   function initialize() {
+    tooltip = createTooltip();
     groupType.addEventListener("change", handleGroupTypeChange);
     groupValue.addEventListener("change", renderSelectedGroup);
+    document.addEventListener("mouseover", handleTooltipEnter);
+    document.addEventListener("focusin", handleTooltipEnter);
+    document.addEventListener("mousemove", handleTooltipMove);
+    document.addEventListener("mouseout", handleTooltipLeave);
+    document.addEventListener("focusout", handleTooltipLeave);
     window.addEventListener("resize", debounce(redrawTimeline, 150));
     loadBreakdown();
   }
@@ -158,6 +165,7 @@
       node.innerHTML = "<span></span><strong></strong>";
       node.querySelector("span").textContent = item.label;
       node.querySelector("strong").textContent = item.value;
+      setTooltip(node, tooltipForTimelineSummary(stats, item.label));
       container.appendChild(node);
     });
   }
@@ -167,7 +175,13 @@
     container.innerHTML = "";
     riskDefinitions.forEach(function (definition) {
       var value = roundOne((stats.riskAverages || {})[definition.key] || 0);
-      container.appendChild(createBarRow(definition.label, value, 100));
+      container.appendChild(createBarRow(
+        definition.label,
+        value,
+        100,
+        false,
+        makeValuesTooltip("Individual values for " + definition.label, getNestedList(stats, ["valueLists", "risks", definition.key]))
+      ));
       if (definition.key === "otherHighestRisk" && stats.otherRiskLabels && stats.otherRiskLabels.length) {
         container.appendChild(createOtherRiskLabels(stats.otherRiskLabels));
       }
@@ -178,6 +192,7 @@
     var node = document.createElement("p");
     node.className = "other-risk-labels";
     node.textContent = "Other entries: " + labels.join(", ");
+    setTooltip(node, makeValuesTooltip("Other highest risk text entries", labels));
     return node;
   }
 
@@ -186,7 +201,7 @@
     container.innerHTML = "";
     var counts = stats.bestBetCounts || {};
     var entries = Object.keys(bestBetLabels).map(function (key) {
-      return { label: bestBetLabels[key], count: counts[key] || 0 };
+      return { key: key, label: bestBetLabels[key], count: counts[key] || 0 };
     }).filter(function (entry) {
       return entry.count > 0;
     }).sort(function (a, b) {
@@ -199,20 +214,39 @@
     }
 
     entries.forEach(function (entry) {
-      container.appendChild(createBarRow(entry.label, entry.count, Math.max(1, stats.count), true));
+      container.appendChild(createBarRow(
+        entry.label,
+        entry.count,
+        Math.max(1, stats.count),
+        true,
+        tooltipForBestBet(stats, entry.key, entry.label, entry.count)
+      ));
     });
   }
 
   function renderOutlookStats(stats) {
     var container = document.getElementById("outlook-stats");
     container.innerHTML = "";
-    container.appendChild(createBarRow("Importance of contributing", roundOne(stats.averageImportance), 100));
-    container.appendChild(createBarRow("Optimism", roundOne(stats.averageOptimism), 100));
+    container.appendChild(createBarRow(
+      "Importance of contributing",
+      roundOne(stats.averageImportance),
+      100,
+      false,
+      makeValuesTooltip("Individual values for importance of contributing", getNestedList(stats, ["valueLists", "importanceLowerRisk"]))
+    ));
+    container.appendChild(createBarRow(
+      "Optimism",
+      roundOne(stats.averageOptimism),
+      100,
+      false,
+      makeValuesTooltip("Individual values for optimism", getNestedList(stats, ["valueLists", "optimismAvoidRisks"]))
+    ));
   }
 
-  function createBarRow(label, value, max, countMode) {
+  function createBarRow(label, value, max, countMode, tooltipText) {
     var row = document.createElement("div");
     row.className = "bar-row";
+    setTooltip(row, tooltipText);
 
     var labelNode = document.createElement("div");
     labelNode.className = "bar-label";
@@ -249,6 +283,10 @@
     var height = Math.max(260, Math.round(rect.height || 300));
     canvas.width = width * ratio;
     canvas.height = height * ratio;
+    setTooltip(canvas, makeLinesTooltip(
+      "Individual timeline responses",
+      getNestedList(window.__riskBreakdownLastStats || {}, ["valueLists", "timeline", "responseLines"])
+    ));
     var ctx = canvas.getContext("2d");
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, width, height);
@@ -350,9 +388,152 @@
       },
       bestBetCounts: {},
       otherRiskLabels: [],
+      valueLists: emptyValueLists(),
       averageImportance: 0,
       averageOptimism: 0
     };
+  }
+
+  function emptyValueLists() {
+    return {
+      risks: {},
+      timeline: {
+        p10Years: [],
+        p50Years: [],
+        customPoints: [],
+        responseLines: []
+      },
+      bestBetTopChoices: [],
+      bestBetRanks: {},
+      importanceLowerRisk: [],
+      optimismAvoidRisks: []
+    };
+  }
+
+  function tooltipForTimelineSummary(stats, label) {
+    if (label === "Median 10% year") {
+      return makeValuesTooltip("Individual 10% years", getNestedList(stats, ["valueLists", "timeline", "p10Years"]));
+    }
+    if (label === "Median 50% year") {
+      return makeValuesTooltip("Individual 50% years", getNestedList(stats, ["valueLists", "timeline", "p50Years"]));
+    }
+    return makeValuesTooltip(
+      "Individual custom probability points",
+      getNestedList(stats, ["valueLists", "timeline", "customPoints"]),
+      formatTextValue
+    );
+  }
+
+  function tooltipForBestBet(stats, key, label, count) {
+    var ranks = getNestedList(stats, ["valueLists", "bestBetRanks", key]);
+    var rankText = ranks.length
+      ? "Ranks received for " + label + ":\n" + ranks.map(formatNumberValue).join(", ")
+      : "Ranks received for " + label + ":\nNo individual values in this view.";
+
+    return "Top-choice count for " + label + ": " + String(count) + "\n" + rankText;
+  }
+
+  function makeValuesTooltip(title, values, formatter) {
+    var format = formatter || formatNumberValue;
+    var list = Array.isArray(values) ? values.filter(function (value) {
+      return value !== null && value !== undefined && value !== "";
+    }) : [];
+
+    if (!list.length) {
+      return title + ":\nNo individual values in this view.";
+    }
+
+    return title + ":\n" + list.map(format).join(", ");
+  }
+
+  function makeLinesTooltip(title, values) {
+    var list = Array.isArray(values) ? values.filter(function (value) {
+      return value !== null && value !== undefined && value !== "";
+    }) : [];
+
+    if (!list.length) {
+      return title + ":\nNo individual values in this view.";
+    }
+
+    return title + ":\n" + list.map(formatTextValue).join("\n");
+  }
+
+  function setTooltip(node, text) {
+    if (!node || !text) return;
+    node.dataset.tooltip = text;
+    if (!node.hasAttribute("tabindex")) node.tabIndex = 0;
+  }
+
+  function createTooltip() {
+    var node = document.createElement("div");
+    node.className = "stat-tooltip";
+    node.hidden = true;
+    document.body.appendChild(node);
+    return node;
+  }
+
+  function handleTooltipEnter(event) {
+    var target = closestTooltipTarget(event.target);
+    if (!target) return;
+
+    tooltip.textContent = target.dataset.tooltip;
+    tooltip.hidden = false;
+    positionTooltip(event);
+  }
+
+  function handleTooltipMove(event) {
+    if (!tooltip || tooltip.hidden) return;
+    positionTooltip(event);
+  }
+
+  function handleTooltipLeave(event) {
+    var target = closestTooltipTarget(event.target);
+    if (!target) return;
+    if (event.relatedTarget && target.contains(event.relatedTarget)) return;
+    tooltip.hidden = true;
+  }
+
+  function closestTooltipTarget(target) {
+    if (!target || typeof target.closest !== "function") return null;
+    return target.closest("[data-tooltip]");
+  }
+
+  function positionTooltip(event) {
+    var x = typeof event.clientX === "number" && event.clientX ? event.clientX : window.innerWidth / 2;
+    var y = typeof event.clientY === "number" && event.clientY ? event.clientY : 80;
+    var margin = 14;
+    var left = x + margin;
+    var top = y + margin;
+
+    tooltip.style.left = String(left) + "px";
+    tooltip.style.top = String(top) + "px";
+
+    var rect = tooltip.getBoundingClientRect();
+    if (rect.right > window.innerWidth - margin) {
+      left = Math.max(margin, window.innerWidth - rect.width - margin);
+    }
+    if (rect.bottom > window.innerHeight - margin) {
+      top = Math.max(margin, window.innerHeight - rect.height - margin);
+    }
+
+    tooltip.style.left = String(left) + "px";
+    tooltip.style.top = String(top) + "px";
+  }
+
+  function getNestedList(source, path) {
+    var value = path.reduce(function (current, key) {
+      return current && current[key] !== undefined ? current[key] : null;
+    }, source);
+
+    return Array.isArray(value) ? value : [];
+  }
+
+  function formatNumberValue(value) {
+    return isFiniteNumber(value) ? String(roundOne(value)) : String(value);
+  }
+
+  function formatTextValue(value) {
+    return String(value);
   }
 
   function roundOne(value) {

@@ -19,6 +19,32 @@
   overflow-wrap: anywhere;
 }
 
+[data-tooltip] {
+  cursor: help;
+}
+
+.stat-tooltip {
+  position: fixed;
+  z-index: 30;
+  max-width: min(360px, calc(100vw - 28px));
+  max-height: min(320px, calc(100vh - 28px));
+  padding: 12px 14px;
+  overflow: auto;
+  color: #ffffff;
+  background: rgba(20, 28, 24, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: pre-line;
+}
+
+.stat-tooltip[hidden] {
+  display: none;
+}
+
 @media (max-width: 680px) {
   .other-risk-labels {
     padding-left: 0;
