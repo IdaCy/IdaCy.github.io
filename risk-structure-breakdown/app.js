@@ -5,7 +5,8 @@
   var endpoint = ((window.RISK_STRUCTURE_CONFIG || {}).endpoint || "").trim();
   var state = {
     breakdown: null,
-    selectedGroup: null
+    selectedGroup: null,
+    hasTooltipValues: false
   };
 
   var riskDefinitions = [
@@ -63,7 +64,10 @@
         throw new Error(data.error || "Statistics could not be loaded.");
       }
       state.breakdown = data.breakdown;
-      loadStatus.textContent = "Statistics loaded.";
+      state.hasTooltipValues = breakdownHasValueLists(state.breakdown);
+      loadStatus.textContent = state.hasTooltipValues
+        ? "Statistics loaded."
+        : "Statistics loaded, but hover tooltips need the latest Apps Script redeploy.";
       handleGroupTypeChange();
     } catch (error) {
       console.error(error);
@@ -439,6 +443,10 @@
       return value !== null && value !== undefined && value !== "";
     }) : [];
 
+    if (!state.hasTooltipValues) {
+      return title + ":\nIndividual values are not available from the current Apps Script deployment. Redeploy the latest google-apps-script.js.";
+    }
+
     if (!list.length) {
       return title + ":\nNo individual values in this view.";
     }
@@ -450,6 +458,10 @@
     var list = Array.isArray(values) ? values.filter(function (value) {
       return value !== null && value !== undefined && value !== "";
     }) : [];
+
+    if (!state.hasTooltipValues) {
+      return title + ":\nIndividual values are not available from the current Apps Script deployment. Redeploy the latest google-apps-script.js.";
+    }
 
     if (!list.length) {
       return title + ":\nNo individual values in this view.";
@@ -526,6 +538,10 @@
     }, source);
 
     return Array.isArray(value) ? value : [];
+  }
+
+  function breakdownHasValueLists(breakdown) {
+    return !!(breakdown && breakdown.all && breakdown.all.stats && breakdown.all.stats.valueLists);
   }
 
   function formatNumberValue(value) {
