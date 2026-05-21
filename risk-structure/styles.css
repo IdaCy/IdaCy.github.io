@@ -91,6 +91,11 @@ h3 {
   font-size: 14px;
 }
 
+.privacy-warning {
+  color: #b42318;
+  font-weight: 700;
+}
+
 .grouped-card {
   display: grid;
   gap: 18px;
