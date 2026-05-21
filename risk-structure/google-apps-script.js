@@ -1,4 +1,5 @@
 var SHEET_NAME = "Risk Structure Responses";
+var SCHEMA_VERSION = "risk-structure-2026-05-21-complete-record";
 
 var HEADERS = [
   "Timestamp",
@@ -48,9 +49,20 @@ var BEST_BET_KEYS = [
 function doGet(e) {
   var action = e && e.parameter && e.parameter.action ? e.parameter.action : "stats";
 
+  if (action === "capabilities") {
+    return jsonResponse({
+      success: true,
+      schemaVersion: SCHEMA_VERSION,
+      storesCompleteRecords: true,
+      supportsOtherHighestRiskLabel: true,
+      supportsBestBetRanking: true
+    });
+  }
+
   if (action === "stats") {
     return jsonResponse({
       success: true,
+      schemaVersion: SCHEMA_VERSION,
       stats: computeStats(readRecords())
     });
   }
@@ -58,6 +70,7 @@ function doGet(e) {
   if (action === "breakdownStats") {
     return jsonResponse({
       success: true,
+      schemaVersion: SCHEMA_VERSION,
       breakdown: computeBreakdownStats(readRecords())
     });
   }
@@ -84,6 +97,7 @@ function doPost(e) {
 
     return jsonResponse({
       success: true,
+      schemaVersion: SCHEMA_VERSION,
       stats: computeStats(readRecords())
     });
   } catch (error) {
@@ -133,15 +147,84 @@ function readRecords() {
 
   values.forEach(function (row) {
     var raw = row[rawJsonIndex];
-    if (!raw) return;
+    var rawRecord = {};
+
+    if (!rowHasContent(row)) return;
+
+    if (raw) {
+      try {
+        rawRecord = JSON.parse(raw);
+      } catch (error) {
+        rawRecord = {};
+      }
+    }
+
     try {
-      records.push(normalizeRecord(JSON.parse(raw)));
+      records.push(normalizeRecord(mergeRowIntoRecord(rawRecord, row)));
     } catch (error) {
       // Skip malformed historical rows rather than exposing partial data.
     }
   });
 
   return records;
+}
+
+function mergeRowIntoRecord(record, row) {
+  var merged = record || {};
+  var start = merged.start || {};
+  var risks = merged.perceivedRisks || {};
+  var otherRisk = risks.otherHighestRisk || {};
+  var aiTimeline = merged.aiTimeline || {};
+  var bestBet = merged.bestBet || {};
+
+  merged.id = rowValueOrExisting(row, "Submission ID", merged.id);
+  merged.submittedAt = rowValueOrExisting(row, "Timestamp", merged.submittedAt);
+  merged.role = rowValueOrExisting(row, "Role", merged.role || merged.capacity);
+  merged.organization = rowValueOrExisting(row, "Organization", merged.organization);
+  merged.importanceLowerRisk = rowValueOrExisting(row, "Importance lowering risk", merged.importanceLowerRisk);
+  merged.optimismAvoidRisks = rowValueOrExisting(row, "Optimism avoiding large risks", merged.optimismAvoidRisks);
+
+  start.year = rowValueOrExisting(row, "Start year", start.year);
+  start.month = rowValueOrExisting(row, "Start month", start.month);
+  merged.start = start;
+
+  risks.newPandemic = rowValueOrExisting(row, "New pandemic", risks.newPandemic);
+  risks.lossControlAI = rowValueOrExisting(row, "Loss of control to AI", risks.lossControlAI);
+  risks.aiMisuse = rowValueOrExisting(row, "AI Misuse", risks.aiMisuse);
+  risks.climateChange = rowValueOrExisting(row, "Climate change", risks.climateChange);
+  risks.nuclearWar = rowValueOrExisting(row, "Nuclear war", risks.nuclearWar);
+  otherRisk.label = rowValueOrExisting(row, "Other highest risk label", otherRisk.label);
+  otherRisk.score = rowValueOrExisting(row, "Other highest risk score", otherRisk.score);
+  risks.otherHighestRisk = otherRisk;
+  merged.perceivedRisks = risks;
+
+  aiTimeline.p10Year = rowValueOrExisting(row, "AI 10% year", aiTimeline.p10Year);
+  aiTimeline.p50Year = rowValueOrExisting(row, "AI 50% year", aiTimeline.p50Year);
+  aiTimeline.customProbability = rowValueOrExisting(row, "Custom AI probability", aiTimeline.customProbability);
+  aiTimeline.customYear = rowValueOrExisting(row, "Custom AI probability year", aiTimeline.customYear);
+  merged.aiTimeline = aiTimeline;
+
+  bestBet.option = rowValueOrExisting(row, "Best bet", bestBet.option);
+  bestBet.otherText = rowValueOrExisting(row, "Best bet other", bestBet.otherText);
+  merged.bestBet = bestBet;
+
+  return merged;
+}
+
+function rowValueOrExisting(row, header, existing) {
+  var index = HEADERS.indexOf(header);
+  if (index === -1) return existing;
+
+  var value = row[index];
+  return hasSheetValue(value) ? value : existing;
+}
+
+function rowHasContent(row) {
+  return row.some(hasSheetValue);
+}
+
+function hasSheetValue(value) {
+  return value !== "" && value !== null && value !== undefined;
 }
 
 function getSheet() {

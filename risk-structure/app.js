@@ -2,6 +2,7 @@
   "use strict";
 
   var STORAGE_KEY = "riskStructureResponses";
+  var REQUIRED_STORAGE_SCHEMA = "risk-structure-2026-05-21-complete-record";
   var CURRENT_YEAR = 2026;
   var MAX_YEAR = 2100;
 
@@ -36,6 +37,7 @@
   var submitButton = document.getElementById("submit-button");
   var anotherButton = document.getElementById("another-response");
   var endpoint = ((window.RISK_STRUCTURE_CONFIG || {}).endpoint || "").trim();
+  var storageSchemaVerified = false;
 
   initialize();
 
@@ -122,6 +124,10 @@
     }
 
     if (!validateOptionalCustomProbability()) {
+      return;
+    }
+
+    if (!await verifyStorageSchema()) {
       return;
     }
 
@@ -226,6 +232,27 @@
     getBestBetRankSelects().forEach(function (select) {
       select.setCustomValidity("");
     });
+  }
+
+  async function verifyStorageSchema() {
+    if (!endpoint || storageSchemaVerified) {
+      return true;
+    }
+
+    try {
+      var response = await fetch(endpoint + "?action=capabilities");
+      var data = await response.json();
+
+      if (data.success && data.schemaVersion === REQUIRED_STORAGE_SCHEMA && data.storesCompleteRecords) {
+        storageSchemaVerified = true;
+        return true;
+      }
+    } catch (error) {
+      console.error(error);
+    }
+
+    errorBox.textContent = "Storage is not using the latest Apps Script yet, so the form cannot safely save complete answers.";
+    return false;
   }
 
   function collectRecord() {
