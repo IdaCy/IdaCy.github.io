@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  --page: #00150f;
+  --page: #0f2f22;
   --card: #fbfcf8;
   --text: #1d211f;
   --muted: #66706b;
@@ -67,6 +67,7 @@ p {
 }
 
 h1 {
+  color: var(--page);
   font-size: 34px;
   font-weight: 600;
   letter-spacing: 0;
@@ -105,6 +106,38 @@ h3 {
 
 .tight-group {
   gap: 10px;
+}
+
+.inline-question-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+}
+
+.inline-question-row > .question-text {
+  flex: 0 0 auto;
+}
+
+.start-row .inline-options {
+  flex: 0 1 auto;
+}
+
+.month-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.month-inline select {
+  width: 150px;
+  min-width: 150px;
+}
+
+.organization-row input {
+  flex: 1 1 320px;
+  width: auto;
+  min-width: 260px;
 }
 
 legend,
@@ -183,7 +216,8 @@ select:focus {
   display: grid;
   grid-template-columns: minmax(140px, 1fr) minmax(180px, 2fr) 42px;
   gap: 16px;
-  margin-top: 14px;
+  margin-top: 6px;
+  margin-bottom: 0;
 }
 
 .slider-scale span:first-child {
@@ -199,7 +233,7 @@ select:focus {
 .slider-list {
   display: grid;
   gap: 17px;
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .slider-row,
@@ -455,6 +489,22 @@ canvas {
   .inline-options {
     flex-direction: column;
     gap: 12px;
+  }
+
+  .inline-question-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .month-inline {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .month-inline select,
+  .organization-row input {
+    width: 100%;
+    min-width: 0;
   }
 
   .slider-row,

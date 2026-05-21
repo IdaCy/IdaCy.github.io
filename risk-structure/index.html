@@ -17,42 +17,45 @@
       <section class="form-card grouped-card" aria-labelledby="background-title">
         <h2 id="background-title">Background</h2>
 
-        <fieldset class="field-group tight-group">
-          <legend>When did you start at Constellation?</legend>
+        <div class="field-group tight-group inline-question-row start-row">
+          <span class="question-text">When did you start at Constellation?</span>
           <div class="inline-options" role="radiogroup" aria-label="Start year">
             <label><input type="radio" name="startYear" value="2024" required> 2024</label>
             <label><input type="radio" name="startYear" value="2025"> 2025</label>
             <label><input type="radio" name="startYear" value="2026"> 2026</label>
           </div>
-          <label class="field-label" for="start-month">Month</label>
-          <select id="start-month" name="startMonth" required>
-            <option value="" selected disabled>Select month</option>
-            <option value="January">January</option>
-            <option value="February">February</option>
-            <option value="March">March</option>
-            <option value="April">April</option>
-            <option value="May">May</option>
-            <option value="June">June</option>
-            <option value="July">July</option>
-            <option value="August">August</option>
-            <option value="September">September</option>
-            <option value="October">October</option>
-            <option value="November">November</option>
-            <option value="December">December</option>
-          </select>
-        </fieldset>
+          <label class="month-inline" for="start-month">
+            <span class="question-text">Month</span>
+            <select id="start-month" name="startMonth" required>
+              <option value="" selected disabled>Select month</option>
+              <option value="January">January</option>
+              <option value="February">February</option>
+              <option value="March">March</option>
+              <option value="April">April</option>
+              <option value="May">May</option>
+              <option value="June">June</option>
+              <option value="July">July</option>
+              <option value="August">August</option>
+              <option value="September">September</option>
+              <option value="October">October</option>
+              <option value="November">November</option>
+              <option value="December">December</option>
+            </select>
+          </label>
+        </div>
 
         <fieldset class="field-group tight-group">
           <legend>Role?</legend>
           <div class="stacked-options">
             <label><input type="radio" name="role" value="Fellow" required> Fellow</label>
-            <label><input type="radio" name="role" value="member of technical staff"> member of technical staff</label>
-            <label><input type="radio" name="role" value="other member of staff"> other member of staff</label>
+            <label><input type="radio" name="role" value="Member of technical staff at below organization"> Member of technical staff at below organization</label>
+            <label><input type="radio" name="role" value="Other member of staff"> Other member of staff</label>
+            <label><input type="radio" name="role" value="Independent research"> Independent research</label>
             <label><input type="radio" name="role" value="External"> External</label>
           </div>
         </fieldset>
 
-        <label class="field-group tight-group" for="organization">
+        <label class="field-group tight-group inline-question-row organization-row" for="organization">
           <span class="question-text">Organization?</span>
           <input id="organization" name="organization" type="text" placeholder="e.g. Anthropic for Anthropic Fellows" required>
         </label>
