@@ -9,7 +9,6 @@
 <body>
   <main class="page-shell">
     <section class="form-card title-card" aria-labelledby="form-title">
-      <div class="accent-bar"></div>
       <h1 id="form-title">Risk Structure</h1>
       <p class="privacy-note">name and personal data not shared with owner of the page</p>
     </section>
@@ -61,7 +60,7 @@
 
       <section class="form-card" aria-labelledby="risk-title">
         <h2 id="risk-title">How do you perceive the risk level (existentially, for humans) for each of the below, within this decade?</h2>
-        <div class="range-scale" aria-hidden="true">
+        <div class="range-scale slider-scale" aria-hidden="true">
           <span>0</span>
           <span>100</span>
         </div>
@@ -102,13 +101,13 @@
 
       <section class="form-card" aria-labelledby="timeline-title">
         <h2 id="timeline-title">Revolution-scale artificial intelligence</h2>
-        <label class="field-group" for="p10-year">
+        <label class="year-question-row" for="p10-year">
           <span class="question-text">When do you expect 10% probability for a revolution-scale artificial intelligence?</span>
-          <select id="p10-year" name="p10Year" required></select>
+          <select class="year-select" id="p10-year" name="p10Year" required></select>
         </label>
-        <label class="field-group" for="p50-year">
+        <label class="year-question-row" for="p50-year">
           <span class="question-text">When do you expect 50% probability for a revolution-scale artificial intelligence?</span>
-          <select id="p50-year" name="p50Year" required></select>
+          <select class="year-select" id="p50-year" name="p50Year" required></select>
         </label>
         <div class="field-group custom-probability">
           <label for="custom-probability">
@@ -118,13 +117,11 @@
           <label for="custom-year">
             <span class="question-text">% probability for a revolution-scale artificial intelligence?</span>
           </label>
-          <select id="custom-year" name="customYear" required></select>
+          <select class="year-select" id="custom-year" name="customYear" required></select>
         </div>
       </section>
 
-      <section class="form-card" aria-labelledby="other-title">
-        <h2 id="other-title">Other questions</h2>
-
+      <section class="form-card other-card" aria-label="Additional risk questions">
         <label class="field-group">
           <span class="question-text">How important is it for you to contribute to lowering risk?</span>
           <span class="range-scale" aria-hidden="true"><span>0</span><span>100</span></span>
@@ -166,7 +163,6 @@
 
     <section id="results" class="results-shell" hidden aria-live="polite">
       <section class="form-card title-card results-title">
-        <div class="accent-bar"></div>
         <h2>Results</h2>
         <p id="result-status" class="privacy-note"></p>
       </section>
