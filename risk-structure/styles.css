@@ -280,6 +280,15 @@ output {
   align-items: end;
 }
 
+.form-card > h2 + .year-question-row {
+  margin-top: 18px;
+}
+
+.year-question-row + .year-question-row,
+.year-question-row + .custom-year-row {
+  margin-top: 14px;
+}
+
 .custom-probability-question {
   line-height: 1.8;
 }
