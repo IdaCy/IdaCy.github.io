@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Risk Structure</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="form-card title-card" aria-labelledby="form-title">
+      <div class="accent-bar"></div>
+      <h1 id="form-title">Risk Structure</h1>
+      <p class="privacy-note">name and personal data not shared with owner of the page</p>
+    </section>
+
+    <form id="risk-form" novalidate>
+      <section class="form-card grouped-card" aria-labelledby="background-title">
+        <h2 id="background-title">Background</h2>
+
+        <fieldset class="field-group tight-group">
+          <legend>When did you start at Constellation?</legend>
+          <div class="inline-options" role="radiogroup" aria-label="Start year">
+            <label><input type="radio" name="startYear" value="2024" required> 2024</label>
+            <label><input type="radio" name="startYear" value="2025"> 2025</label>
+            <label><input type="radio" name="startYear" value="2026"> 2026</label>
+          </div>
+          <label class="field-label" for="start-month">Month</label>
+          <select id="start-month" name="startMonth" required>
+            <option value="" selected disabled>Select month</option>
+            <option value="January">January</option>
+            <option value="February">February</option>
+            <option value="March">March</option>
+            <option value="April">April</option>
+            <option value="May">May</option>
+            <option value="June">June</option>
+            <option value="July">July</option>
+            <option value="August">August</option>
+            <option value="September">September</option>
+            <option value="October">October</option>
+            <option value="November">November</option>
+            <option value="December">December</option>
+          </select>
+        </fieldset>
+
+        <fieldset class="field-group tight-group">
+          <legend>Role?</legend>
+          <div class="stacked-options">
+            <label><input type="radio" name="role" value="Fellow" required> Fellow</label>
+            <label><input type="radio" name="role" value="member of technical staff"> member of technical staff</label>
+            <label><input type="radio" name="role" value="other member of staff"> other member of staff</label>
+            <label><input type="radio" name="role" value="External"> External</label>
+          </div>
+        </fieldset>
+
+        <label class="field-group tight-group" for="organization">
+          <span class="question-text">Organization?</span>
+          <input id="organization" name="organization" type="text" placeholder="e.g. Anthropic for Anthropic Fellows" required>
+        </label>
+      </section>
+
+      <section class="form-card" aria-labelledby="risk-title">
+        <h2 id="risk-title">How do you perceive the risk level (existentially, for humans) for each of the below, within this decade?</h2>
+        <div class="range-scale" aria-hidden="true">
+          <span>0</span>
+          <span>100</span>
+        </div>
+
+        <div class="slider-list">
+          <label class="slider-row">
+            <span>New pandemic</span>
+            <input type="range" name="newPandemic" min="0" max="100" value="50" data-output="newPandemicOut">
+            <output id="newPandemicOut">50</output>
+          </label>
+          <label class="slider-row">
+            <span>Loss of control to AI</span>
+            <input type="range" name="lossControlAI" min="0" max="100" value="50" data-output="lossControlAIOut">
+            <output id="lossControlAIOut">50</output>
+          </label>
+          <label class="slider-row">
+            <span>AI Misuse</span>
+            <input type="range" name="aiMisuse" min="0" max="100" value="50" data-output="aiMisuseOut">
+            <output id="aiMisuseOut">50</output>
+          </label>
+          <label class="slider-row">
+            <span>Climate change</span>
+            <input type="range" name="climateChange" min="0" max="100" value="50" data-output="climateChangeOut">
+            <output id="climateChangeOut">50</output>
+          </label>
+          <label class="slider-row">
+            <span>Nuclear war</span>
+            <input type="range" name="nuclearWar" min="0" max="100" value="50" data-output="nuclearWarOut">
+            <output id="nuclearWarOut">50</output>
+          </label>
+          <div class="slider-row other-risk-row">
+            <input class="inline-text-input" type="text" name="otherRiskLabel" placeholder="Other highest risk" aria-label="Other highest risk">
+            <input type="range" name="otherHighestRisk" min="0" max="100" value="50" data-output="otherHighestRiskOut" aria-label="Other highest risk level">
+            <output id="otherHighestRiskOut">50</output>
+          </div>
+        </div>
+      </section>
+
+      <section class="form-card" aria-labelledby="timeline-title">
+        <h2 id="timeline-title">Revolution-scale artificial intelligence</h2>
+        <label class="field-group" for="p10-year">
+          <span class="question-text">When do you expect 10% probability for a revolution-scale artificial intelligence?</span>
+          <select id="p10-year" name="p10Year" required></select>
+        </label>
+        <label class="field-group" for="p50-year">
+          <span class="question-text">When do you expect 50% probability for a revolution-scale artificial intelligence?</span>
+          <select id="p50-year" name="p50Year" required></select>
+        </label>
+        <div class="field-group custom-probability">
+          <label for="custom-probability">
+            <span class="question-text">When do you expect</span>
+          </label>
+          <input id="custom-probability" name="customProbability" type="number" min="1" max="99" step="1" placeholder="%" required>
+          <label for="custom-year">
+            <span class="question-text">% probability for a revolution-scale artificial intelligence?</span>
+          </label>
+          <select id="custom-year" name="customYear" required></select>
+        </div>
+      </section>
+
+      <section class="form-card" aria-labelledby="other-title">
+        <h2 id="other-title">Other questions</h2>
+
+        <label class="field-group">
+          <span class="question-text">How important is it for you to contribute to lowering risk?</span>
+          <span class="range-scale" aria-hidden="true"><span>0</span><span>100</span></span>
+          <span class="single-slider">
+            <input type="range" name="importanceLowerRisk" min="0" max="100" value="50" data-output="importanceLowerRiskOut">
+            <output id="importanceLowerRiskOut">50</output>
+          </span>
+        </label>
+
+        <fieldset class="field-group">
+          <legend>What do you think is our best bet for avoiding catastrophic risk?</legend>
+          <div class="stacked-options">
+            <label><input type="radio" name="bestBet" value="aligning AI" required> aligning AI</label>
+            <label><input type="radio" name="bestBet" value="pausing AI development/training"> pausing AI development/training</label>
+            <label><input type="radio" name="bestBet" value="slowing down AI development/training"> slowing down AI development/training</label>
+            <label><input type="radio" name="bestBet" value="technical AI safety to control AI"> technical AI safety to control AI</label>
+            <label><input type="radio" name="bestBet" value="technical AI safety to understand and predict AI"> technical AI safety to understand and predict AI</label>
+            <label><input type="radio" name="bestBet" value="other technical AI safety ways"> other technical AI safety ways</label>
+            <label><input type="radio" name="bestBet" value="winning the race and having AI solve AI alignment"> winning the race and having AI solve AI alignment</label>
+            <label class="other-option"><input type="radio" name="bestBet" value="other"> other <input id="best-bet-other" name="bestBetOther" type="text" aria-label="Other best bet"></label>
+          </div>
+        </fieldset>
+
+        <label class="field-group">
+          <span class="question-text">How optimistic are you that we can avoid the large risks?</span>
+          <span class="range-scale" aria-hidden="true"><span>0</span><span>100</span></span>
+          <span class="single-slider">
+            <input type="range" name="optimismAvoidRisks" min="0" max="100" value="50" data-output="optimismAvoidRisksOut">
+            <output id="optimismAvoidRisksOut">50</output>
+          </span>
+        </label>
+      </section>
+
+      <p id="form-error" class="form-error" role="alert"></p>
+      <div class="submit-row">
+        <button type="submit" id="submit-button">Submit</button>
+      </div>
+    </form>
+
+    <section id="results" class="results-shell" hidden aria-live="polite">
+      <section class="form-card title-card results-title">
+        <div class="accent-bar"></div>
+        <h2>Results</h2>
+        <p id="result-status" class="privacy-note"></p>
+      </section>
+
+      <section class="form-card stats-card">
+        <div class="stats-header">
+          <h3>AI timeline</h3>
+          <p><span id="response-count">0</span> responses</p>
+        </div>
+        <canvas id="timeline-chart" width="840" height="360" aria-label="Expected probability over time"></canvas>
+        <div id="timeline-summary" class="summary-grid"></div>
+      </section>
+
+      <section class="form-card stats-card">
+        <h3>Risk levels this decade</h3>
+        <div id="risk-bars" class="bar-list"></div>
+      </section>
+
+      <section class="form-card stats-card two-column-stats">
+        <div>
+          <h3>Best bet</h3>
+          <div id="best-bet-bars" class="bar-list compact-bars"></div>
+        </div>
+        <div>
+          <h3>Outlook</h3>
+          <div id="outlook-stats" class="outlook-list"></div>
+        </div>
+      </section>
+
+      <div class="submit-row">
+        <button type="button" id="another-response" class="secondary-button">Submit another response</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
