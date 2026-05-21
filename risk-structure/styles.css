@@ -310,6 +310,38 @@ input.probability-inline-input {
   gap: 30px;
 }
 
+.ranking-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ranking-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 14px;
+  align-items: center;
+}
+
+.ranking-row > label,
+.ranking-other-label {
+  min-width: 0;
+}
+
+.ranking-select {
+  width: 112px;
+  min-width: 112px;
+  min-height: 38px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.ranking-other-label {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
 .other-option {
   display: grid;
   grid-template-columns: auto auto 1fr;
@@ -318,7 +350,10 @@ input.probability-inline-input {
 }
 
 #best-bet-other {
-  margin-left: 10px;
+  min-height: 38px;
+  margin-left: 0;
+  padding-top: 5px;
+  padding-bottom: 5px;
 }
 
 .submit-row {
@@ -518,6 +553,7 @@ canvas {
   .slider-row,
   .other-risk-row,
   .year-question-row,
+  .ranking-row,
   .bar-row,
   .compact-bars .bar-row {
     grid-template-columns: 1fr;
@@ -536,6 +572,16 @@ canvas {
   .year-select {
     width: 100%;
     min-width: 0;
+  }
+
+  .ranking-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ranking-other-label {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 
   .custom-probability-question {

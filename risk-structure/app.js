@@ -14,16 +14,21 @@
     { key: "otherHighestRisk", label: "Other highest risk" }
   ];
 
-  var bestBetLabels = {
-    "aligning AI": "aligning AI",
-    "pausing AI development/training": "pausing AI development/training",
-    "slowing down AI development/training": "slowing down AI development/training",
-    "technical AI safety to control AI": "technical AI safety to control AI",
-    "technical AI safety to understand and predict AI": "technical AI safety to understand and predict AI",
-    "other technical AI safety ways": "other technical AI safety ways",
-    "winning the race and having AI solve AI alignment": "winning the race and having AI solve AI alignment",
-    other: "other"
-  };
+  var bestBetOptions = [
+    { key: "aligning AI", label: "aligning AI" },
+    { key: "pausing AI development/training", label: "pausing AI development/training" },
+    { key: "slowing down AI development/training", label: "slowing down AI development/training" },
+    { key: "technical AI safety to control AI", label: "technical AI safety to control AI" },
+    { key: "technical AI safety to understand and predict AI", label: "technical AI safety to understand and predict AI" },
+    { key: "other technical AI safety ways", label: "other technical AI safety ways" },
+    { key: "winning the race and having AI solve AI alignment", label: "winning the race and having AI solve AI alignment" },
+    { key: "other", label: "other" }
+  ];
+
+  var bestBetLabels = bestBetOptions.reduce(function (labels, option) {
+    labels[option.key] = option.label;
+    return labels;
+  }, {});
 
   var form = document.getElementById("risk-form");
   var results = document.getElementById("results");
@@ -36,8 +41,9 @@
 
   function initialize() {
     populateYearSelects();
+    populateBestBetRanking();
     bindSliders();
-    bindBestBetOther();
+    bindBestBetRanking();
     form.addEventListener("submit", handleSubmit);
     anotherButton.addEventListener("click", showFormAgain);
     window.addEventListener("resize", debounce(redrawTimeline, 150));
@@ -67,28 +73,48 @@
     });
   }
 
-  function bindBestBetOther() {
-    var otherInput = document.getElementById("best-bet-other");
-    var otherRadio = document.querySelector('input[name="bestBet"][value="other"]');
-    var syncRequired = function () {
-      otherInput.required = otherRadio.checked;
-    };
+  function populateBestBetRanking() {
+    var selects = getBestBetRankSelects();
+    selects.forEach(function (select) {
+      if (select.options.length) return;
 
-    Array.prototype.forEach.call(document.querySelectorAll('input[name="bestBet"]'), function (radio) {
-      radio.addEventListener("change", syncRequired);
-    });
+      var placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Rank";
+      placeholder.disabled = true;
+      placeholder.selected = true;
+      select.appendChild(placeholder);
 
-    otherInput.addEventListener("focus", function () {
-      otherRadio.checked = true;
-      syncRequired();
+      for (var rank = 1; rank <= selects.length; rank += 1) {
+        var option = document.createElement("option");
+        option.value = String(rank);
+        if (rank === 1) {
+          option.textContent = "1 (top)";
+        } else if (rank === selects.length) {
+          option.textContent = String(rank) + " (bottom)";
+        } else {
+          option.textContent = String(rank);
+        }
+        select.appendChild(option);
+      }
     });
-    syncRequired();
+  }
+
+  function bindBestBetRanking() {
+    getBestBetRankSelects().forEach(function (select) {
+      select.addEventListener("change", clearBestBetRankingValidity);
+    });
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
     errorBox.textContent = "";
     clearOptionalCustomProbabilityValidity();
+    clearBestBetRankingValidity();
+
+    if (!validateBestBetRanking()) {
+      return;
+    }
 
     if (!form.reportValidity()) {
       errorBox.textContent = "Please fill in every required field.";
@@ -126,7 +152,7 @@
       var stats = remoteStats || computeStats(endpoint ? loadLocalRecords().concat([record]) : loadLocalRecords());
       showResults(stats, statusText);
       form.reset();
-      document.getElementById("best-bet-other").required = false;
+      clearBestBetRankingValidity();
       bindSliders();
     } catch (error) {
       saveLocalRecord(record);
@@ -170,9 +196,42 @@
     return false;
   }
 
+  function validateBestBetRanking() {
+    var selects = getBestBetRankSelects();
+    var ranks = {};
+    var duplicateSelect = null;
+    var message = "Use each best-bet rank only once.";
+
+    selects.forEach(function (select) {
+      var rank = select.value;
+      if (!rank || duplicateSelect) return;
+      if (ranks[rank]) {
+        duplicateSelect = select;
+      } else {
+        ranks[rank] = true;
+      }
+    });
+
+    if (!duplicateSelect) {
+      return true;
+    }
+
+    duplicateSelect.setCustomValidity(message);
+    errorBox.textContent = message;
+    form.reportValidity();
+    return false;
+  }
+
+  function clearBestBetRankingValidity() {
+    getBestBetRankSelects().forEach(function (select) {
+      select.setCustomValidity("");
+    });
+  }
+
   function collectRecord() {
     var formData = new FormData(form);
-    var bestBet = String(formData.get("bestBet") || "");
+    var bestBetRanking = collectBestBetRanking(formData);
+    var bestBet = getTopRankingOption(bestBetRanking);
     var aiTimeline = {
       p10Year: toNumber(formData.get("p10Year")),
       p50Year: toNumber(formData.get("p50Year"))
@@ -188,7 +247,7 @@
     var record = {
       id: createId(),
       submittedAt: new Date().toISOString(),
-      formVersion: "2026-05-21",
+      formVersion: "2026-05-21-ranked-best-bet",
       start: {
         year: String(formData.get("startYear") || ""),
         month: String(formData.get("startMonth") || "")
@@ -210,7 +269,8 @@
       importanceLowerRisk: toNumber(formData.get("importanceLowerRisk")),
       bestBet: {
         option: bestBet,
-        otherText: bestBet === "other" ? String(formData.get("bestBetOther") || "").trim() : ""
+        otherText: String(formData.get("bestBetOther") || "").trim(),
+        ranking: bestBetRanking
       },
       optimismAvoidRisks: toNumber(formData.get("optimismAvoidRisks"))
     };
@@ -447,7 +507,7 @@
       stats.bestBetCounts[key] = 0;
     });
     cleanRecords.forEach(function (record) {
-      var key = record.bestBet.option || "other";
+      var key = getRecordBestBetTopOption(record) || "other";
       if (!Object.prototype.hasOwnProperty.call(stats.bestBetCounts, key)) {
         stats.bestBetCounts[key] = 0;
       }
@@ -455,6 +515,49 @@
     });
 
     return stats;
+  }
+
+  function collectBestBetRanking(formData) {
+    return getBestBetRankSelects().map(function (select) {
+      var option = select.dataset.bestBetOption;
+      return {
+        option: option,
+        label: bestBetLabels[option] || option,
+        rank: toNumber(formData.get(select.name))
+      };
+    }).filter(function (entry) {
+      return entry.option && isFiniteNumber(entry.rank);
+    }).sort(function (a, b) {
+      if (a.rank === b.rank) return bestBetOptionIndex(a.option) - bestBetOptionIndex(b.option);
+      return a.rank - b.rank;
+    });
+  }
+
+  function getTopRankingOption(ranking) {
+    return ranking.length ? ranking[0].option : "";
+  }
+
+  function getRecordBestBetTopOption(record) {
+    var bestBet = record && record.bestBet ? record.bestBet : {};
+    var ranking = Array.isArray(bestBet.ranking) ? bestBet.ranking.filter(function (entry) {
+      return entry && entry.option && isFiniteNumber(entry.rank);
+    }).sort(function (a, b) {
+      if (a.rank === b.rank) return bestBetOptionIndex(a.option) - bestBetOptionIndex(b.option);
+      return a.rank - b.rank;
+    }) : [];
+
+    return ranking.length ? ranking[0].option : String(bestBet.option || "");
+  }
+
+  function bestBetOptionIndex(option) {
+    for (var index = 0; index < bestBetOptions.length; index += 1) {
+      if (bestBetOptions[index].key === option) return index;
+    }
+    return bestBetOptions.length;
+  }
+
+  function getBestBetRankSelects() {
+    return Array.prototype.slice.call(document.querySelectorAll("[data-best-bet-option]"));
   }
 
   function collectOtherRiskLabels(records) {

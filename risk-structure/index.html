@@ -132,16 +132,43 @@
         </label>
 
         <fieldset class="field-group">
-          <legend>What do you think is our best bet for avoiding catastrophic risk?</legend>
-          <div class="stacked-options">
-            <label><input type="radio" name="bestBet" value="aligning AI" required> aligning AI</label>
-            <label><input type="radio" name="bestBet" value="pausing AI development/training"> pausing AI development/training</label>
-            <label><input type="radio" name="bestBet" value="slowing down AI development/training"> slowing down AI development/training</label>
-            <label><input type="radio" name="bestBet" value="technical AI safety to control AI"> technical AI safety to control AI</label>
-            <label><input type="radio" name="bestBet" value="technical AI safety to understand and predict AI"> technical AI safety to understand and predict AI</label>
-            <label><input type="radio" name="bestBet" value="other technical AI safety ways"> other technical AI safety ways</label>
-            <label><input type="radio" name="bestBet" value="winning the race and having AI solve AI alignment"> winning the race and having AI solve AI alignment</label>
-            <label class="other-option"><input type="radio" name="bestBet" value="other"> other <input id="best-bet-other" name="bestBetOther" type="text" aria-label="Other best bet"></label>
+          <legend>Rank: What do you think is our best bet for avoiding catastrophic risk?</legend>
+          <div class="ranking-list">
+            <div class="ranking-row">
+              <label for="best-bet-rank-aligning">aligning AI</label>
+              <select class="ranking-select" id="best-bet-rank-aligning" name="bestBetRank0" data-best-bet-option="aligning AI" required aria-label="Rank for aligning AI"></select>
+            </div>
+            <div class="ranking-row">
+              <label for="best-bet-rank-pausing">pausing AI development/training</label>
+              <select class="ranking-select" id="best-bet-rank-pausing" name="bestBetRank1" data-best-bet-option="pausing AI development/training" required aria-label="Rank for pausing AI development/training"></select>
+            </div>
+            <div class="ranking-row">
+              <label for="best-bet-rank-slowing">slowing down AI development/training</label>
+              <select class="ranking-select" id="best-bet-rank-slowing" name="bestBetRank2" data-best-bet-option="slowing down AI development/training" required aria-label="Rank for slowing down AI development/training"></select>
+            </div>
+            <div class="ranking-row">
+              <label for="best-bet-rank-control">technical AI safety to control AI</label>
+              <select class="ranking-select" id="best-bet-rank-control" name="bestBetRank3" data-best-bet-option="technical AI safety to control AI" required aria-label="Rank for technical AI safety to control AI"></select>
+            </div>
+            <div class="ranking-row">
+              <label for="best-bet-rank-understand">technical AI safety to understand and predict AI</label>
+              <select class="ranking-select" id="best-bet-rank-understand" name="bestBetRank4" data-best-bet-option="technical AI safety to understand and predict AI" required aria-label="Rank for technical AI safety to understand and predict AI"></select>
+            </div>
+            <div class="ranking-row">
+              <label for="best-bet-rank-other-technical">other technical AI safety ways</label>
+              <select class="ranking-select" id="best-bet-rank-other-technical" name="bestBetRank5" data-best-bet-option="other technical AI safety ways" required aria-label="Rank for other technical AI safety ways"></select>
+            </div>
+            <div class="ranking-row">
+              <label for="best-bet-rank-race">winning the race and having AI solve AI alignment</label>
+              <select class="ranking-select" id="best-bet-rank-race" name="bestBetRank6" data-best-bet-option="winning the race and having AI solve AI alignment" required aria-label="Rank for winning the race and having AI solve AI alignment"></select>
+            </div>
+            <div class="ranking-row">
+              <div class="ranking-other-label">
+                <label for="best-bet-other">other</label>
+                <input id="best-bet-other" name="bestBetOther" type="text" aria-label="Other best bet" placeholder="optional">
+              </div>
+              <select class="ranking-select" id="best-bet-rank-other" name="bestBetRank7" data-best-bet-option="other" required aria-label="Rank for other"></select>
+            </div>
           </div>
         </fieldset>
 

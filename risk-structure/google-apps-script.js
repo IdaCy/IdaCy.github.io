@@ -180,6 +180,7 @@ function normalizeRecord(input) {
   var aiTimeline = record.aiTimeline || {};
   var start = record.start || {};
   var bestBet = record.bestBet || {};
+  var bestBetRanking = normalizeBestBetRanking(bestBet);
 
   return {
     id: String(record.id || Utilities.getUuid()),
@@ -210,8 +211,9 @@ function normalizeRecord(input) {
     },
     importanceLowerRisk: toNumber(record.importanceLowerRisk),
     bestBet: {
-      option: String(bestBet.option || ""),
-      otherText: String(bestBet.otherText || "")
+      option: getTopBestBetOption({ bestBet: { option: String(bestBet.option || ""), ranking: bestBetRanking } }),
+      otherText: String(bestBet.otherText || ""),
+      ranking: bestBetRanking
     },
     optimismAvoidRisks: toNumber(record.optimismAvoidRisks)
   };
@@ -250,7 +252,7 @@ function computeStats(records) {
   });
 
   cleanRecords.forEach(function (record) {
-    var key = record.bestBet.option || "other";
+    var key = getTopBestBetOption(record) || "other";
     if (!Object.prototype.hasOwnProperty.call(stats.bestBetCounts, key)) {
       stats.bestBetCounts[key] = 0;
     }
@@ -258,6 +260,89 @@ function computeStats(records) {
   });
 
   return stats;
+}
+
+function normalizeBestBetRanking(bestBet) {
+  var source = bestBet && Array.isArray(bestBet.ranking) ? bestBet.ranking : [];
+  var entries = [];
+  var seen = {};
+
+  source.forEach(function (entry) {
+    var option = String(entry && entry.option ? entry.option : "");
+    var rank = toNumber(entry && entry.rank);
+
+    if (!option || !isFiniteNumber(rank) || seen[option]) return;
+    seen[option] = true;
+    entries.push({
+      option: option,
+      label: getBestBetLabel(option),
+      rank: rank
+    });
+  });
+
+  if (!entries.length) {
+    return makeLegacyBestBetRanking(String(bestBet && bestBet.option ? bestBet.option : ""));
+  }
+
+  BEST_BET_KEYS.forEach(function (option) {
+    if (!seen[option]) {
+      entries.push({
+        option: option,
+        label: getBestBetLabel(option),
+        rank: BEST_BET_KEYS.length
+      });
+    }
+  });
+
+  return entries.sort(sortBestBetRanking);
+}
+
+function makeLegacyBestBetRanking(selectedOption) {
+  var option = String(selectedOption || "");
+  var ranking = [];
+
+  if (!option) return ranking;
+
+  if (option && BEST_BET_KEYS.indexOf(option) === -1) {
+    ranking.push({
+      option: option,
+      label: getBestBetLabel(option),
+      rank: 1
+    });
+  }
+
+  BEST_BET_KEYS.forEach(function (key) {
+    ranking.push({
+      option: key,
+      label: getBestBetLabel(key),
+      rank: key === option ? 1 : 2
+    });
+  });
+
+  return ranking.sort(sortBestBetRanking);
+}
+
+function getTopBestBetOption(record) {
+  var bestBet = record && record.bestBet ? record.bestBet : {};
+  var ranking = Array.isArray(bestBet.ranking) ? bestBet.ranking.filter(function (entry) {
+    return entry && entry.option && isFiniteNumber(entry.rank);
+  }).sort(sortBestBetRanking) : [];
+
+  return ranking.length ? String(ranking[0].option) : String(bestBet.option || "");
+}
+
+function sortBestBetRanking(a, b) {
+  if (a.rank === b.rank) return bestBetOptionIndex(a.option) - bestBetOptionIndex(b.option);
+  return a.rank - b.rank;
+}
+
+function bestBetOptionIndex(option) {
+  var index = BEST_BET_KEYS.indexOf(option);
+  return index === -1 ? BEST_BET_KEYS.length : index;
+}
+
+function getBestBetLabel(option) {
+  return String(option || "");
 }
 
 function collectOtherRiskLabels(records) {
