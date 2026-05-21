@@ -12,6 +12,12 @@
   margin-top: 0;
 }
 
+.other-risk-labels {
+  margin-top: 2px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 @media (min-width: 681px) {
   .controls-card {
     grid-template-columns: 1fr 1fr;

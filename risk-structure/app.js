@@ -429,6 +429,7 @@
       riskAverages: {},
       timeline: computeTimeline(cleanRecords),
       bestBetCounts: {},
+      otherRiskLabels: collectOtherRiskLabels(cleanRecords),
       averageImportance: average(cleanRecords.map(function (record) { return record.importanceLowerRisk; })),
       averageOptimism: average(cleanRecords.map(function (record) { return record.optimismAvoidRisks; }))
     };
@@ -454,6 +455,28 @@
     });
 
     return stats;
+  }
+
+  function collectOtherRiskLabels(records) {
+    var seen = {};
+    var labels = [];
+
+    records.forEach(function (record) {
+      var label = record &&
+        record.perceivedRisks &&
+        record.perceivedRisks.otherHighestRisk &&
+        record.perceivedRisks.otherHighestRisk.label
+          ? String(record.perceivedRisks.otherHighestRisk.label).trim()
+          : "";
+      var key = label.toLowerCase();
+
+      if (label && !seen[key]) {
+        seen[key] = true;
+        labels.push(label);
+      }
+    });
+
+    return labels;
   }
 
   function computeTimeline(records) {
