@@ -88,9 +88,14 @@
   async function handleSubmit(event) {
     event.preventDefault();
     errorBox.textContent = "";
+    clearOptionalCustomProbabilityValidity();
 
     if (!form.reportValidity()) {
       errorBox.textContent = "Please fill in every required field.";
+      return;
+    }
+
+    if (!validateOptionalCustomProbability()) {
       return;
     }
 
@@ -136,9 +141,50 @@
     }
   }
 
+  function clearOptionalCustomProbabilityValidity() {
+    document.getElementById("custom-probability").setCustomValidity("");
+    document.getElementById("custom-year").setCustomValidity("");
+  }
+
+  function validateOptionalCustomProbability() {
+    var probabilityInput = document.getElementById("custom-probability");
+    var yearSelect = document.getElementById("custom-year");
+    var hasProbability = probabilityInput.value.trim() !== "";
+    var hasYear = yearSelect.value !== "";
+    var message = "Fill in both the optional probability and year, or leave both blank.";
+
+    probabilityInput.setCustomValidity("");
+    yearSelect.setCustomValidity("");
+
+    if (hasProbability === hasYear) {
+      return true;
+    }
+
+    if (!hasProbability) {
+      probabilityInput.setCustomValidity(message);
+    } else {
+      yearSelect.setCustomValidity(message);
+    }
+    errorBox.textContent = message;
+    form.reportValidity();
+    return false;
+  }
+
   function collectRecord() {
     var formData = new FormData(form);
     var bestBet = String(formData.get("bestBet") || "");
+    var aiTimeline = {
+      p10Year: toNumber(formData.get("p10Year")),
+      p50Year: toNumber(formData.get("p50Year"))
+    };
+    var customProbability = toNumber(formData.get("customProbability"));
+    var customYear = toNumber(formData.get("customYear"));
+
+    if (customProbability !== null || customYear !== null) {
+      aiTimeline.customProbability = customProbability;
+      aiTimeline.customYear = customYear;
+    }
+
     var record = {
       id: createId(),
       submittedAt: new Date().toISOString(),
@@ -160,12 +206,7 @@
           score: toNumber(formData.get("otherHighestRisk"))
         }
       },
-      aiTimeline: {
-        p10Year: toNumber(formData.get("p10Year")),
-        p50Year: toNumber(formData.get("p50Year")),
-        customProbability: toNumber(formData.get("customProbability")),
-        customYear: toNumber(formData.get("customYear"))
-      },
+      aiTimeline: aiTimeline,
       importanceLowerRisk: toNumber(formData.get("importanceLowerRisk")),
       bestBet: {
         option: bestBet,
@@ -225,7 +266,7 @@
     container.innerHTML = "";
     riskDefinitions.forEach(function (definition) {
       var value = Math.round((stats.riskAverages[definition.key] || 0) * 10) / 10;
-      container.appendChild(createBarRow(definition.label, value, 100));
+      container.appendChild(createBarRow(definition.label, value, 10));
     });
   }
 
@@ -253,8 +294,8 @@
   function renderOutlookStats(stats) {
     var container = document.getElementById("outlook-stats");
     container.innerHTML = "";
-    container.appendChild(createBarRow("Importance of contributing", roundOne(stats.averageImportance), 100));
-    container.appendChild(createBarRow("Optimism", roundOne(stats.averageOptimism), 100));
+    container.appendChild(createBarRow("Importance of contributing", roundOne(stats.averageImportance), 10));
+    container.appendChild(createBarRow("Optimism", roundOne(stats.averageOptimism), 10));
   }
 
   function createBarRow(label, value, max, countMode) {
@@ -508,6 +549,7 @@
   }
 
   function toNumber(value) {
+    if (value === null || value === undefined || value === "") return null;
     var number = Number(value);
     return Number.isFinite(number) ? number : null;
   }

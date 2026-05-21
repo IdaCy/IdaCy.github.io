@@ -359,6 +359,7 @@ function uniqueSorted(values) {
 }
 
 function toNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
   var number = Number(value);
   return isFiniteNumber(number) ? number : null;
 }
