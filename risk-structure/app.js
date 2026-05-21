@@ -2,7 +2,7 @@
   "use strict";
 
   var STORAGE_KEY = "riskStructureResponses";
-  var REQUIRED_STORAGE_SCHEMA = "risk-structure-2026-05-21-complete-record";
+  var REQUIRED_STORAGE_SCHEMA = "risk-structure-2026-05-21-partial-ranking";
   var CURRENT_YEAR = 2026;
   var MAX_YEAR = 2100;
 
@@ -82,8 +82,7 @@
 
       var placeholder = document.createElement("option");
       placeholder.value = "";
-      placeholder.textContent = "Rank";
-      placeholder.disabled = true;
+      placeholder.textContent = "not ranked";
       placeholder.selected = true;
       select.appendChild(placeholder);
 
@@ -206,11 +205,13 @@
     var selects = getBestBetRankSelects();
     var ranks = {};
     var duplicateSelect = null;
-    var message = "Use each best-bet rank only once.";
+    var bottomRank = String(selects.length);
+    var message = "Use each best-bet rank only once, except unranked/bottom choices.";
 
     selects.forEach(function (select) {
       var rank = select.value;
       if (!rank || duplicateSelect) return;
+      if (rank === bottomRank) return;
       if (ranks[rank]) {
         duplicateSelect = select;
       } else {
@@ -280,7 +281,7 @@
         month: String(formData.get("startMonth") || "")
       },
       role: String(formData.get("role") || ""),
-      organization: String(formData.get("organization") || "").trim(),
+      organization: normalizeOrganizationInput(formData.get("organization")),
       perceivedRisks: {
         newPandemic: toNumber(formData.get("newPandemic")),
         lossControlAI: toNumber(formData.get("lossControlAI")),
@@ -534,7 +535,8 @@
       stats.bestBetCounts[key] = 0;
     });
     cleanRecords.forEach(function (record) {
-      var key = getRecordBestBetTopOption(record) || "other";
+      var key = getRecordBestBetTopOption(record);
+      if (!key) return;
       if (!Object.prototype.hasOwnProperty.call(stats.bestBetCounts, key)) {
         stats.bestBetCounts[key] = 0;
       }
@@ -545,12 +547,15 @@
   }
 
   function collectBestBetRanking(formData) {
+    var bottomRank = getBestBetRankSelects().length;
+
     return getBestBetRankSelects().map(function (select) {
       var option = select.dataset.bestBetOption;
+      var selectedRank = toNumber(formData.get(select.name));
       return {
         option: option,
         label: bestBetLabels[option] || option,
-        rank: toNumber(formData.get(select.name))
+        rank: selectedRank === null ? bottomRank : selectedRank
       };
     }).filter(function (entry) {
       return entry.option && isFiniteNumber(entry.rank);
@@ -561,7 +566,12 @@
   }
 
   function getTopRankingOption(ranking) {
-    return ranking.length ? ranking[0].option : "";
+    var bottomRank = bestBetOptions.length;
+    var topEntry = ranking.find(function (entry) {
+      return entry.rank < bottomRank;
+    });
+
+    return topEntry ? topEntry.option : "";
   }
 
   function getRecordBestBetTopOption(record) {
@@ -573,7 +583,7 @@
       return a.rank - b.rank;
     }) : [];
 
-    return ranking.length ? ranking[0].option : String(bestBet.option || "");
+    return getTopRankingOption(ranking) || String(bestBet.option || "");
   }
 
   function bestBetOptionIndex(option) {
@@ -705,6 +715,11 @@
     if (value === null || value === undefined || value === "") return null;
     var number = Number(value);
     return Number.isFinite(number) ? number : null;
+  }
+
+  function normalizeOrganizationInput(value) {
+    var organization = String(value || "").trim();
+    return organization || "Not filled";
   }
 
   function isFiniteNumber(value) {

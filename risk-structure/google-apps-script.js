@@ -1,5 +1,5 @@
 var SHEET_NAME = "Risk Structure Responses";
-var SCHEMA_VERSION = "risk-structure-2026-05-21-complete-record";
+var SCHEMA_VERSION = "risk-structure-2026-05-21-partial-ranking";
 
 var HEADERS = [
   "Timestamp",
@@ -55,7 +55,9 @@ function doGet(e) {
       schemaVersion: SCHEMA_VERSION,
       storesCompleteRecords: true,
       supportsOtherHighestRiskLabel: true,
-      supportsBestBetRanking: true
+      supportsBestBetRanking: true,
+      supportsPartialBestBetRanking: true,
+      storesBlankOrganizationAsNotFilled: true
     });
   }
 
@@ -274,7 +276,7 @@ function normalizeRecord(input) {
       month: String(start.month || "")
     },
     role: String(record.role || record.capacity || ""),
-    organization: String(record.organization || ""),
+    organization: normalizeStoredOrganization(record.organization),
     perceivedRisks: {
       newPandemic: toNumber(risks.newPandemic),
       lossControlAI: toNumber(risks.lossControlAI),
@@ -335,7 +337,8 @@ function computeStats(records) {
   });
 
   cleanRecords.forEach(function (record) {
-    var key = getTopBestBetOption(record) || "other";
+    var key = getTopBestBetOption(record);
+    if (!key) return;
     if (!Object.prototype.hasOwnProperty.call(stats.bestBetCounts, key)) {
       stats.bestBetCounts[key] = 0;
     }
@@ -398,7 +401,7 @@ function makeLegacyBestBetRanking(selectedOption) {
     ranking.push({
       option: key,
       label: getBestBetLabel(key),
-      rank: key === option ? 1 : 2
+      rank: key === option ? 1 : BEST_BET_KEYS.length
     });
   });
 
@@ -407,11 +410,17 @@ function makeLegacyBestBetRanking(selectedOption) {
 
 function getTopBestBetOption(record) {
   var bestBet = record && record.bestBet ? record.bestBet : {};
+  var bottomRank = BEST_BET_KEYS.length;
   var ranking = Array.isArray(bestBet.ranking) ? bestBet.ranking.filter(function (entry) {
-    return entry && entry.option && isFiniteNumber(entry.rank);
+    return entry && entry.option && isFiniteNumber(entry.rank) && entry.rank < bottomRank;
   }).sort(sortBestBetRanking) : [];
 
   return ranking.length ? String(ranking[0].option) : String(bestBet.option || "");
+}
+
+function normalizeStoredOrganization(value) {
+  var organization = String(value || "").trim();
+  return organization || "Not filled";
 }
 
 function sortBestBetRanking(a, b) {
