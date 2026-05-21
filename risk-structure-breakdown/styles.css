@@ -13,9 +13,16 @@
 }
 
 .other-risk-labels {
-  margin-top: 2px;
+  margin: -4px 0 4px;
+  padding-left: calc(54.5% + 12px);
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 680px) {
+  .other-risk-labels {
+    padding-left: 0;
+  }
 }
 
 @media (min-width: 681px) {

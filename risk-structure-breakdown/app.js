@@ -164,20 +164,21 @@
 
   function renderRiskBars(stats) {
     var container = document.getElementById("risk-bars");
-    var otherLabels = document.getElementById("other-risk-labels");
     container.innerHTML = "";
     riskDefinitions.forEach(function (definition) {
       var value = roundOne((stats.riskAverages || {})[definition.key] || 0);
       container.appendChild(createBarRow(definition.label, value, 100));
+      if (definition.key === "otherHighestRisk" && stats.otherRiskLabels && stats.otherRiskLabels.length) {
+        container.appendChild(createOtherRiskLabels(stats.otherRiskLabels));
+      }
     });
+  }
 
-    if (stats.otherRiskLabels && stats.otherRiskLabels.length) {
-      otherLabels.hidden = false;
-      otherLabels.textContent = "Other: " + stats.otherRiskLabels.join(", ");
-    } else {
-      otherLabels.hidden = true;
-      otherLabels.textContent = "";
-    }
+  function createOtherRiskLabels(labels) {
+    var node = document.createElement("p");
+    node.className = "other-risk-labels";
+    node.textContent = "Other entries: " + labels.join(", ");
+    return node;
   }
 
   function renderBestBetBars(stats) {
