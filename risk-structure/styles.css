@@ -222,7 +222,8 @@ select:focus {
   grid-template-columns: minmax(140px, 1fr) minmax(180px, 2fr) 42px;
   gap: 16px;
   margin-top: 6px;
-  margin-bottom: 0;
+  margin-bottom: -6px;
+  line-height: 1;
 }
 
 .slider-scale span:first-child {
