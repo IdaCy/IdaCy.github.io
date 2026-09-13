@@ -6,13 +6,7 @@
   <title>Datacenter Training-Run Verification Demo</title>
   <meta
     name="description"
-    content="Interactive catalog-v2 demo for layered verification of large AI training runs and discrepancy/evasion risk on monitored GPU clusters."
-  >
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&display=swap"
-    rel="stylesheet"
+    content="Interactive demo of the staged A/B/C evidence model for verifying policy-scale AI training runs on monitored accelerator clusters."
   >
   <link rel="stylesheet" href="./styles.css">
 </head>
@@ -20,10 +14,11 @@
   <div class="app-shell">
     <header class="topbar">
       <div>
-        <p id="dataset-eyebrow" class="eyebrow">Synthetic dataset</p>
+        <p class="eyebrow">Staged evidence model, draft14</p>
         <h1>Datacenter Training-Run Verification</h1>
       </div>
       <div class="topbar-actions">
+        <span id="parity-badge" class="parity-badge" title="On load the page rescores every shipped row and compares its route and Lambda against the value the reference Python implementation produced at build time.">parity: checking</span>
         <span id="dataset-status">Loading dataset</span>
         <a href="https://github.com/IdaCy/IdaCy.github.io/tree/main/datacenter-verification" target="_blank" rel="noreferrer">GitHub Repo</a>
       </div>
@@ -34,147 +29,201 @@
         <div id="scene-root"></div>
         <div class="scene-hud">
           <div>
-            <span class="hud-label" title="Maximum concurrent normalized accelerators allocated in the selected window.">Active GPUs</span>
-            <strong id="hud-gpus">0</strong>
+            <span class="hud-label" title="A(W), the covered accelerator-activity score.">Activity A</span>
+            <strong id="hud-activity">0%</strong>
           </div>
           <div>
-            <span class="hud-label" title="Maximum of collective periodicity and synchronized fabric footprint divided by capacity.">Fabric Signal</span>
+            <span class="hud-label" title="Collective-like fabric cadence F(W), scaled by how much the fabric channel can speak.">Fabric</span>
             <strong id="hud-fabric">0%</strong>
           </div>
           <div>
-            <span class="hud-label" title="P95 rack/facility power fraction for the selected window.">Rack Power</span>
-            <strong id="hud-power">0%</strong>
+            <span class="hud-label" title="pi_scale, the probability the compute threshold was crossed, from stage A.">Scale</span>
+            <strong id="hud-scale">0%</strong>
           </div>
           <div>
-            <span class="hud-label" title="Minimum critical monitoring coverage. Low coverage weakens no-run claims.">Coverage</span>
+            <span class="hud-label" title="Lambda_cov over its own maximum. This is the ceiling the delivered telemetry could ever reach.">Coverage</span>
             <strong id="hud-coverage">0%</strong>
           </div>
         </div>
-        <div class="legend" aria-label="Evidence color legend">
-          <span title="Allocated rack capacity"><i class="legend-swatch allocation"></i>Allocation</span>
-          <span title="GPU utilization and tensor activity"><i class="legend-swatch activity"></i>GPU activity</span>
-          <span title="Collective periodicity or synchronized fabric footprint"><i class="legend-swatch fabric"></i>Fabric</span>
-          <span title="Rack and facility power corroboration"><i class="legend-swatch power"></i>Power</span>
-          <span title="Checkpoint or storage cadence"><i class="legend-swatch storage"></i>Storage</span>
-          <span title="Coverage and monitoring-integrity warnings"><i class="legend-swatch integrity"></i>Integrity</span>
-          <span title="Installed capacity not active in the selected window"><i class="legend-swatch neutral"></i>Inactive capacity</span>
+        <div class="legend" aria-label="Scene color legend">
+          <span title="Capacity present in the monitored scope"><i class="legend-swatch allocation"></i>Capacity</span>
+          <span title="Accelerator activity score A(W)"><i class="legend-swatch activity"></i>Activity</span>
+          <span title="Scale-out fabric cadence"><i class="legend-swatch fabric"></i>Fabric</span>
+          <span title="pi_scale, the stage A scale probability"><i class="legend-swatch power"></i>Scale pressure</span>
+          <span title="Checkpoint and state-write pathway"><i class="legend-swatch storage"></i>Checkpoints</span>
+          <span title="Integrity review, from witness incoherence or discrepancy mass"><i class="legend-swatch integrity"></i>Integrity</span>
+          <span title="Capacity outside the covered live segment"><i class="legend-swatch neutral"></i>Uncovered</span>
         </div>
       </section>
 
-      <section class="control-panel" aria-label="Data controls and verification result">
+      <section class="control-panel" aria-label="Data controls and staged verification result">
         <section class="selectors">
-          <label title="Filters synthetic rows by monitored site. Site metadata affects capacity and trust context.">
-            Site
-            <select id="site-select"></select>
-          </label>
-          <label title="Filters synthetic rows by the generator's scenario family. It does not force the evidence inputs to become that workload after manual edits.">
+          <label title="Scenario family from the seeded synthetic generator. The family is an independent label, it is not an input to the model.">
             Scenario family
-            <select id="scenario-select"></select>
+            <select id="family-select"></select>
           </label>
-          <label title="Feature aggregation duration for the synthetic row, not necessarily the full run duration.">
-            Aggregation window
-            <select id="window-select"></select>
-          </label>
-          <label title="Specific synthetic feature row matching the current filters. Row labels show model output, with truth labels only when they differ.">
-            Datapoint
+          <label title="One generated instance. The listed route is the model's own answer, the expected route is the generator's independent label.">
+            Instance
             <select id="row-select"></select>
           </label>
-          <p id="context-status" class="context-status"></p>
           <p id="filter-status" class="filter-status" aria-live="polite"></p>
-          <p id="api-status" class="api-status" aria-live="polite"></p>
         </section>
 
-        <section class="quick-picks" aria-label="Label example buttons">
-          <button type="button" data-example-label="0" title="Load a catalog-v2 L0 training-probability example.">L0</button>
-          <button type="button" data-example-label="1" title="Load a catalog-v2 L1 training-probability example.">L1</button>
-          <button type="button" data-example-label="2" title="Load a catalog-v2 L2 training-probability example.">L2</button>
-          <button type="button" data-example-label="3" title="Load a catalog-v2 L3 training-probability example.">L3</button>
-          <button type="button" data-example-label="4" title="Load a catalog-v2 L4 training-probability example.">L4</button>
-          <button type="button" data-evasion-label="clear" title="Load a clear discrepancy/evasion example.">Clear</button>
-          <button type="button" data-evasion-label="watch" title="Load a watch-level discrepancy/evasion example.">Watch</button>
-          <button type="button" data-evasion-label="suspicious" title="Load a suspicious discrepancy/evasion example.">Suspicious</button>
-          <button type="button" data-evasion-label="likely" title="Load a likely discrepancy/evasion example.">Likely Evasion</button>
-          <button type="button" id="reset-row" title="Restore evidence inputs from the selected datapoint.">Reset Edits</button>
+        <section class="quick-picks" aria-label="Jump to a routed claim">
+          <button type="button" data-route="capacity_ruled_out_for_scope" title="Load an instance the model rules out on capacity.">Ruled out</button>
+          <button type="button" data-route="high_training_like_warning" title="Load a high training-like warning.">High</button>
+          <button type="button" data-route="medium_training_like_warning" title="Load a medium training-like warning.">Medium</button>
+          <button type="button" data-route="weak_training_like_candidate" title="Load a weak training-like candidate.">Weak</button>
+          <button type="button" data-route="candidate_explained_or_demoted" title="Load an instance where a benign explanation took the pathway down.">Explained</button>
+          <button type="button" data-route="integrity_review_required" title="Load an instance routed to integrity review.">Integrity</button>
+          <button type="button" data-route="inconclusive_due_to_missingness" title="Load an instance where the delivered telemetry cannot carry a claim.">Inconclusive</button>
+          <button type="button" id="reset-row" title="Restore every input from the selected instance.">Reset edits</button>
         </section>
 
-        <section class="judgement">
-          <div class="judgement-main">
-            <p id="state-banner" class="state-banner"></p>
-            <p id="result-mode" class="eyebrow">Catalog v2 datapoint</p>
-            <p id="mode-detail" class="mode-detail">Selected datapoint was generated from the public catalog rules.</p>
-            <h2 id="result-label">Loading</h2>
-            <div class="risk-meter" aria-label="Large training probability">
-              <div id="risk-fill"></div>
+        <section class="verdict" aria-label="Routed claim">
+          <p class="eyebrow">Routed claim</p>
+          <h2 id="route-label">Loading</h2>
+          <p id="route-detail" class="mode-detail"></p>
+          <div class="label-compare">
+            <div>
+              <span>Generator family</span>
+              <strong id="label-family">-</strong>
             </div>
-            <div class="risk-row">
-              <span title="Probability that the evidence supports a policy-scale large training run.">Large training probability</span>
-              <strong id="p-large">0%</strong>
+            <div>
+              <span title="The route the generator expected for this instance, written when the instance was made. It is an independent label and the model never sees it.">Expected route</span>
+              <strong id="label-expected">-</strong>
             </div>
-            <div class="risk-meter evasion-meter" aria-label="Discrepancy or evasion probability">
-              <div id="evasion-fill"></div>
+            <div>
+              <span title="Whether the model's routed claim is inside the generator's expected route set.">Agreement</span>
+              <strong id="label-agree">-</strong>
             </div>
-            <div class="risk-row">
-              <span title="Probability that cross-layer evidence is discrepant enough to require evasion or reconciliation review.">Discrepancy / evasion probability</span>
-              <strong id="p-evasion">0%</strong>
-            </div>
+          </div>
+          <p id="edit-notice" class="edit-notice"></p>
+        </section>
+
+        <section class="stage" aria-label="Stage A, capacity">
+          <div class="section-heading">
+            <h2>Stage A, capacity</h2>
+            <span id="stage-a-flag">-</span>
           </div>
           <div class="metric-grid">
-            <div title="Expected label severity on the 0-4 label scale.">
-              <span>Severity</span>
-              <strong id="severity-score">0.00</strong>
+            <div title="Conservative capacity upper bound in operations: accelerator count times peak rate times window seconds times the adjustment factor.">
+              <span>Capacity bound B</span>
+              <strong id="a-bound">0</strong>
             </div>
-            <div title="Coverage-weighted confidence that no policy-scale large training run occurred. This is not 1 minus large-training probability.">
-              <span>No-run confidence</span>
-              <strong id="negative-confidence">0%</strong>
+            <div title="Capacity coverage times scope completeness times clock-alignment confidence.">
+              <span>c*</span>
+              <strong id="a-cstar">0</strong>
             </div>
-            <div title="Warns when critical telemetry coverage, counter availability, clock/counter integrity, or edited feature consistency is suspect.">
-              <span>Integrity</span>
-              <strong id="integrity-status">Clear</strong>
+            <div title="Threshold-scale runs the segment could have supported once unobserved scope is counted in.">
+              <span>mu</span>
+              <strong id="a-mu">0</strong>
             </div>
-            <div title="Whether the monitored capacity and largest contiguous domain can support the illustrative policy-scale threshold.">
-              <span>Policy capacity</span>
-              <strong id="capacity-status">Unknown</strong>
-            </div>
-            <div title="Discrete discrepancy/evasion level from explicit catalog rules.">
-              <span>Evasion review</span>
-              <strong id="evasion-status">Clear</strong>
+            <div title="pi_scale, the stage A answer to the scale question.">
+              <span>pi_scale</span>
+              <strong id="a-piscale">0</strong>
             </div>
           </div>
+          <div id="a-ruleout" class="ruleout"></div>
+          <ul id="a-notes" class="note-list"></ul>
         </section>
 
-        <section class="probability-panel" aria-label="Label probabilities">
-          <div id="probability-bars"></div>
-        </section>
-
-        <section class="site-context" aria-label="Selected site context">
+        <section class="stage" aria-label="Stage B, evidence in bits">
           <div class="section-heading">
-            <h2>Site Context</h2>
-            <span title="Fixed facts of the selected site/scope. Change the selected site to change these values.">Fixed by selected site</span>
+            <h2>Stage B, evidence in bits</h2>
+            <span id="stage-b-total">Lambda 0.00 bits</span>
           </div>
-          <div id="site-facts-root"></div>
+
+          <div class="bits-chart">
+            <div class="bits-row">
+              <span class="bits-side-label" title="The most the delivered telemetry could ever be worth: K_fabric times w_F plus K_storage times w_C plus K_serving times w_N. Computable before any value is read.">Lambda_cov</span>
+              <div class="bits-track ceiling-track">
+                <div id="ceiling-bands" class="bits-bands"></div>
+                <div id="ceiling-fill" class="ceiling-fill"></div>
+                <div class="bits-zero"></div>
+              </div>
+              <span id="ceiling-value" class="bits-value">0.00</span>
+            </div>
+
+            <div class="bits-row">
+              <span class="bits-side-label" title="Signed stacked contributions. Positive bits stack right of zero, negative bits stack left.">Lambda</span>
+              <div class="bits-track main-track">
+                <div id="bits-bands" class="bits-bands"></div>
+                <div id="bits-stack" class="bits-stack"></div>
+                <div class="bits-zero"></div>
+                <div id="bits-marker" class="bits-marker"></div>
+              </div>
+              <span id="bits-value" class="bits-value">0.00</span>
+            </div>
+            <div class="bits-row">
+              <span class="bits-side-label"></span>
+              <div id="bits-axis" class="bits-axis"></div>
+              <span class="bits-value"></span>
+            </div>
+          </div>
+
+          <div class="bits-legend">
+            <span><i class="legend-swatch fabric"></i>Lambda_F, fabric</span>
+            <span><i class="legend-swatch storage"></i>Lambda_C, checkpoint</span>
+            <span><i class="legend-swatch activity"></i>Lambda_N, non-serving</span>
+            <span><i class="legend-swatch band"></i>1, 2, 3 bit bands</span>
+          </div>
+
+          <table class="pathway-table">
+            <thead>
+              <tr><th>Pathway</th><th title="Whether the channel can speak at all about this segment.">alpha</th><th title="2z minus 1, the evidence direction on the score scale.">psi</th><th title="Benign explanation strength supplied by stage C.">b</th><th title="Pathway weight in bits.">w</th><th>Lambda</th></tr>
+            </thead>
+            <tbody id="pathway-body"></tbody>
+          </table>
+          <ul id="b-notes" class="note-list"></ul>
+        </section>
+
+        <section class="stage" aria-label="Stage C, support and discrepancy">
+          <div class="section-heading">
+            <h2>Stage C, support and discrepancy</h2>
+            <span id="stage-c-flag">-</span>
+          </div>
+          <div class="d-meter" title="Discrepancy mass D. At 0.5 and above the segment routes to integrity review. Below that it is the weight on pi_ref.">
+            <div class="risk-meter">
+              <div id="d-fill"></div>
+              <div class="d-review-line"></div>
+            </div>
+            <div class="risk-row">
+              <span>Discrepancy mass D</span>
+              <strong id="c-d">0.000</strong>
+            </div>
+          </div>
+          <h3 class="sub-heading">Benign explanations, into b</h3>
+          <ul id="c-explanations" class="note-list"></ul>
+          <h3 class="sub-heading">Discrepancies, into D</h3>
+          <ul id="c-discrepancies" class="note-list"></ul>
+          <h3 class="sub-heading">Witness coherence</h3>
+          <ul id="c-witness" class="note-list"></ul>
+        </section>
+
+        <section class="stage" aria-label="The one number">
+          <div class="section-heading">
+            <h2>The one number</h2>
+            <span title="pi equals one minus D, times pi_scale, times pi_identity, plus D times pi_ref.">pi = (1-D) pi_scale pi_identity + D pi_ref</span>
+          </div>
+          <div id="probability-bars"></div>
         </section>
 
         <section class="control-surface">
           <div class="section-heading">
-            <h2>Evidence Inputs</h2>
-            <span id="policy-ratio" title="Allocated GPUs times allocation hours divided by 512 GPUs times 24 hours.">Policy ratio 0.00</span>
+            <h2>Model inputs</h2>
+            <span title="Every control here writes into the record the model reads. Nothing is post-processed.">Edits recompute live</span>
           </div>
           <div id="controls-root"></div>
         </section>
 
-        <section class="evidence-panel">
-          <div>
-            <h2>Top Evidence</h2>
-            <ul id="evidence-list"></ul>
-          </div>
-          <div>
-            <h2>Missing Layers</h2>
-            <ul id="missing-list"></ul>
-          </div>
-          <div>
-            <h2>Discrepancies</h2>
-            <ul id="evasion-list"></ul>
-          </div>
+        <section class="footnote">
+          <p>
+            The routed claim, the bits, and the probability on this page are produced by a direct port of the reference implementation behind the paper's simulation results. The parity badge in the header rescores every shipped instance in the browser and compares it against the value the Python reference produced at build time.
+          </p>
+          <p>
+            The superseded catalog-v2 demo is preserved unchanged under <code>legacy-catalog-v2/</code>. It implements an earlier design and should not be read as evidence for anything in the current paper.
+          </p>
         </section>
       </section>
     </main>
@@ -187,7 +236,7 @@
   <script src="./vendor/three.min.js" defer></script>
   <script src="./vendor/OrbitControls.js" defer></script>
   <script src="./data/demo-data.js" defer></script>
-  <script src="./scoring.js" defer></script>
+  <script src="./model.js" defer></script>
   <script src="./scene.js" defer></script>
   <script src="./app.js" defer></script>
 </body>

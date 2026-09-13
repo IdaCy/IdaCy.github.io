@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Datacenter Training-Run Verification Demo</title>
+  <meta
+    name="description"
+    content="Interactive catalog-v2 demo for layered verification of large AI training runs and discrepancy/evasion risk on monitored GPU clusters."
+  >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  >
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p id="dataset-eyebrow" class="eyebrow">Synthetic dataset</p>
+        <h1>Datacenter Training-Run Verification</h1>
+      </div>
+      <div class="topbar-actions">
+        <span id="dataset-status">Loading dataset</span>
+        <a href="https://github.com/IdaCy/IdaCy.github.io/tree/main/datacenter-verification" target="_blank" rel="noreferrer">GitHub Repo</a>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="visual-panel" aria-label="3D datacenter evidence schematic">
+        <div id="scene-root"></div>
+        <div class="scene-hud">
+          <div>
+            <span class="hud-label" title="Maximum concurrent normalized accelerators allocated in the selected window.">Active GPUs</span>
+            <strong id="hud-gpus">0</strong>
+          </div>
+          <div>
+            <span class="hud-label" title="Maximum of collective periodicity and synchronized fabric footprint divided by capacity.">Fabric Signal</span>
+            <strong id="hud-fabric">0%</strong>
+          </div>
+          <div>
+            <span class="hud-label" title="P95 rack/facility power fraction for the selected window.">Rack Power</span>
+            <strong id="hud-power">0%</strong>
+          </div>
+          <div>
+            <span class="hud-label" title="Minimum critical monitoring coverage. Low coverage weakens no-run claims.">Coverage</span>
+            <strong id="hud-coverage">0%</strong>
+          </div>
+        </div>
+        <div class="legend" aria-label="Evidence color legend">
+          <span title="Allocated rack capacity"><i class="legend-swatch allocation"></i>Allocation</span>
+          <span title="GPU utilization and tensor activity"><i class="legend-swatch activity"></i>GPU activity</span>
+          <span title="Collective periodicity or synchronized fabric footprint"><i class="legend-swatch fabric"></i>Fabric</span>
+          <span title="Rack and facility power corroboration"><i class="legend-swatch power"></i>Power</span>
+          <span title="Checkpoint or storage cadence"><i class="legend-swatch storage"></i>Storage</span>
+          <span title="Coverage and monitoring-integrity warnings"><i class="legend-swatch integrity"></i>Integrity</span>
+          <span title="Installed capacity not active in the selected window"><i class="legend-swatch neutral"></i>Inactive capacity</span>
+        </div>
+      </section>
+
+      <section class="control-panel" aria-label="Data controls and verification result">
+        <section class="selectors">
+          <label title="Filters synthetic rows by monitored site. Site metadata affects capacity and trust context.">
+            Site
+            <select id="site-select"></select>
+          </label>
+          <label title="Filters synthetic rows by the generator's scenario family. It does not force the evidence inputs to become that workload after manual edits.">
+            Scenario family
+            <select id="scenario-select"></select>
+          </label>
+          <label title="Feature aggregation duration for the synthetic row, not necessarily the full run duration.">
+            Aggregation window
+            <select id="window-select"></select>
+          </label>
+          <label title="Specific synthetic feature row matching the current filters. Row labels show model output, with truth labels only when they differ.">
+            Datapoint
+            <select id="row-select"></select>
+          </label>
+          <p id="context-status" class="context-status"></p>
+          <p id="filter-status" class="filter-status" aria-live="polite"></p>
+          <p id="api-status" class="api-status" aria-live="polite"></p>
+        </section>
+
+        <section class="quick-picks" aria-label="Label example buttons">
+          <button type="button" data-example-label="0" title="Load a catalog-v2 L0 training-probability example.">L0</button>
+          <button type="button" data-example-label="1" title="Load a catalog-v2 L1 training-probability example.">L1</button>
+          <button type="button" data-example-label="2" title="Load a catalog-v2 L2 training-probability example.">L2</button>
+          <button type="button" data-example-label="3" title="Load a catalog-v2 L3 training-probability example.">L3</button>
+          <button type="button" data-example-label="4" title="Load a catalog-v2 L4 training-probability example.">L4</button>
+          <button type="button" data-evasion-label="clear" title="Load a clear discrepancy/evasion example.">Clear</button>
+          <button type="button" data-evasion-label="watch" title="Load a watch-level discrepancy/evasion example.">Watch</button>
+          <button type="button" data-evasion-label="suspicious" title="Load a suspicious discrepancy/evasion example.">Suspicious</button>
+          <button type="button" data-evasion-label="likely" title="Load a likely discrepancy/evasion example.">Likely Evasion</button>
+          <button type="button" id="reset-row" title="Restore evidence inputs from the selected datapoint.">Reset Edits</button>
+        </section>
+
+        <section class="judgement">
+          <div class="judgement-main">
+            <p id="state-banner" class="state-banner"></p>
+            <p id="result-mode" class="eyebrow">Catalog v2 datapoint</p>
+            <p id="mode-detail" class="mode-detail">Selected datapoint was generated from the public catalog rules.</p>
+            <h2 id="result-label">Loading</h2>
+            <div class="risk-meter" aria-label="Large training probability">
+              <div id="risk-fill"></div>
+            </div>
+            <div class="risk-row">
+              <span title="Probability that the evidence supports a policy-scale large training run.">Large training probability</span>
+              <strong id="p-large">0%</strong>
+            </div>
+            <div class="risk-meter evasion-meter" aria-label="Discrepancy or evasion probability">
+              <div id="evasion-fill"></div>
+            </div>
+            <div class="risk-row">
+              <span title="Probability that cross-layer evidence is discrepant enough to require evasion or reconciliation review.">Discrepancy / evasion probability</span>
+              <strong id="p-evasion">0%</strong>
+            </div>
+          </div>
+          <div class="metric-grid">
+            <div title="Expected label severity on the 0-4 label scale.">
+              <span>Severity</span>
+              <strong id="severity-score">0.00</strong>
+            </div>
+            <div title="Coverage-weighted confidence that no policy-scale large training run occurred. This is not 1 minus large-training probability.">
+              <span>No-run confidence</span>
+              <strong id="negative-confidence">0%</strong>
+            </div>
+            <div title="Warns when critical telemetry coverage, counter availability, clock/counter integrity, or edited feature consistency is suspect.">
+              <span>Integrity</span>
+              <strong id="integrity-status">Clear</strong>
+            </div>
+            <div title="Whether the monitored capacity and largest contiguous domain can support the illustrative policy-scale threshold.">
+              <span>Policy capacity</span>
+              <strong id="capacity-status">Unknown</strong>
+            </div>
+            <div title="Discrete discrepancy/evasion level from explicit catalog rules.">
+              <span>Evasion review</span>
+              <strong id="evasion-status">Clear</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="probability-panel" aria-label="Label probabilities">
+          <div id="probability-bars"></div>
+        </section>
+
+        <section class="site-context" aria-label="Selected site context">
+          <div class="section-heading">
+            <h2>Site Context</h2>
+            <span title="Fixed facts of the selected site/scope. Change the selected site to change these values.">Fixed by selected site</span>
+          </div>
+          <div id="site-facts-root"></div>
+        </section>
+
+        <section class="control-surface">
+          <div class="section-heading">
+            <h2>Evidence Inputs</h2>
+            <span id="policy-ratio" title="Allocated GPUs times allocation hours divided by 512 GPUs times 24 hours.">Policy ratio 0.00</span>
+          </div>
+          <div id="controls-root"></div>
+        </section>
+
+        <section class="evidence-panel">
+          <div>
+            <h2>Top Evidence</h2>
+            <ul id="evidence-list"></ul>
+          </div>
+          <div>
+            <h2>Missing Layers</h2>
+            <ul id="missing-list"></ul>
+          </div>
+          <div>
+            <h2>Discrepancies</h2>
+            <ul id="evasion-list"></ul>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <noscript>
+    <p class="noscript">This interactive demo needs JavaScript enabled.</p>
+  </noscript>
+
+  <script src="../vendor/three.min.js" defer></script>
+  <script src="../vendor/OrbitControls.js" defer></script>
+  <script src="./data/demo-data.js" defer></script>
+  <script src="./scoring.js" defer></script>
+  <script src="./scene.js" defer></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>

@@ -1,7 +1,24 @@
+/*
+ * 3D schematic of the monitored scope.
+ * The look is unchanged from the earlier demo. Only the inputs are remapped, so
+ * every channel now comes from the staged model rather than from catalog-v2
+ * observables:
+ *   activity   A(W), the covered accelerator-activity score
+ *   fabric     alpha_F times the fabric cadence, how much the fabric can say
+ *   allocation mu clamped to one, capacity present against the policy threshold
+ *   power      pi_scale, the stage A answer to the scale question
+ *   coverage   Lambda_cov over its own maximum
+ *   storage    alpha_C times the checkpoint score
+ *   integrity  whether the segment routed to integrity review
+ */
 (function () {
-const { asNumber, cadenceScore, clamp } = window.DCVScoring;
-
 const RACK_COUNT = 48;
+
+function clamp(value) {
+  var v = Number(value);
+  if (v !== v) return 0;
+  return Math.max(0, Math.min(1, v));
+}
 
 class DatacenterScene {
   constructor(container) {
@@ -166,50 +183,47 @@ class DatacenterScene {
     this.root.add(this.integrityFrame);
   }
 
-  update(features, result, site = null) {
-    const capacity = Math.max(1, asNumber(features.o1_normalized_training_compute_capacity, 1));
-    const rackDesignKw = Math.max(
-      1,
-      asNumber(site?.rack_power_design_kw, Math.max(1000, asNumber(features.o8_rack_it_power_kw)))
-    );
-    const allocation = asNumber(features.o2_allocated_accelerator_count);
-    const gpuUtil = clamp(asNumber(features.o4_gpu_busy_percent) / 100);
-    const fabric = Math.max(
-      cadenceScore(features.o7_collective_periodicity_step_cadence) * 0.85,
-      clamp(asNumber(features.o7_synchronized_fabric_footprint) / Math.max(capacity, 1)),
-      clamp(asNumber(features.o7_scaleout_port_utilization) / 100)
-    );
-    const power = clamp(asNumber(features.o8_rack_it_power_kw) / rackDesignKw);
-    const checkpoint = checkpointSignal(features);
-    const coverage = clamp(asNumber(features.o14_telemetry_coverage_fraction_by_layer, 1));
-    const activeFraction = clamp(allocation / capacity);
-    const activeRacks = Math.round(activeFraction * RACK_COUNT);
-    const allocationColor = new THREE.Color(0x3c78a8);
+  update(inputs) {
+    const activity = clamp(inputs.activity);
+    const fabric = clamp(inputs.fabric);
+    const allocation = clamp(inputs.allocation);
+    const power = clamp(inputs.power);
+    const coverage = clamp(inputs.coverage);
+    const storage = clamp(inputs.storage);
+    const integrityStrength = clamp(inputs.integrityStrength);
+
+    const activeRacks = Math.round(allocation * RACK_COUNT);
+    const coveredRacks = Math.round(coverage * activeRacks);
+    const capacityColor = new THREE.Color(0x3c78a8);
+    const uncoveredColor = new THREE.Color(0xd9d3c2);
     const inactiveColor = new THREE.Color(0x9aa39f);
 
     this.racks.forEach((rack, index) => {
       const active = index < activeRacks;
+      const covered = index < coveredRacks;
       const activityCap = this.activityCaps[index];
       const material = rack.material;
-      const target = inactiveColor.clone();
-      if (active) {
-        target.copy(allocationColor);
+      if (!active) {
+        material.color.copy(inactiveColor);
+      } else if (covered) {
+        material.color.copy(capacityColor);
+      } else {
+        material.color.copy(uncoveredColor);
       }
-      material.color.copy(target);
       material.opacity = active ? 0.88 : 0.66;
-      rack.scale.y = active ? 1 + gpuUtil * 0.42 : 0.72;
+      rack.scale.y = active ? 1 + activity * 0.42 : 0.72;
       rack.position.y = rack.userData.baseY + (rack.scale.y - 1) * 0.58;
-      activityCap.visible = active && gpuUtil > 0.04;
-      activityCap.material.opacity = active ? 0.28 + gpuUtil * 0.7 : 0;
+      activityCap.visible = active && covered && activity > 0.04;
+      activityCap.material.opacity = active && covered ? 0.28 + activity * 0.7 : 0;
       activityCap.position.set(rack.position.x, rack.position.y + rack.scale.y * 0.62 + 0.045, rack.position.z);
     });
 
     this.powerPlane.material.opacity = power * 0.24;
-    this.integrityFrame.material.opacity = result.integrityWarning || coverage < 0.8
-      ? 0.36 + clamp(result.evasionProbability || 0) * 0.52
+    this.integrityFrame.material.opacity = inputs.integrity
+      ? 0.36 + integrityStrength * 0.52
       : 0;
-    this.updateFabricLines(activeRacks, fabric);
-    this.updateStorageMarkers(checkpoint, result.label);
+    this.updateFabricLines(Math.max(activeRacks, 2), fabric);
+    this.updateStorageMarkers(storage);
   }
 
   updateFabricLines(activeRacks, fabric) {
@@ -237,9 +251,9 @@ class DatacenterScene {
     this.fabricGroup.add(lines);
   }
 
-  updateStorageMarkers(checkpoint, label) {
+  updateStorageMarkers(storage) {
     this.markerGroup.clear();
-    const count = Math.min(9, Math.round(checkpoint * 10));
+    const count = Math.min(9, Math.round(storage * 10));
     if (!count) return;
     const geometry = new THREE.BoxGeometry(0.42, 0.1, 0.42);
     const material = new THREE.MeshBasicMaterial({
@@ -272,19 +286,6 @@ class DatacenterScene {
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(() => this.animate());
   }
-}
-
-function checkpointSignal(features) {
-  let signal = 0;
-  const writeSize = asNumber(features.o11_checkpoint_write_size);
-  if (writeSize > 0) {
-    signal = Math.max(signal, clamp((Math.log10(writeSize + 1) - 10.5) / 2));
-  }
-  const period = asNumber(features.o11_checkpoint_period);
-  if (period >= 600 && period <= 21600) {
-    signal = Math.max(signal, 0.75);
-  }
-  return clamp(signal);
 }
 
 window.DatacenterScene = DatacenterScene;
