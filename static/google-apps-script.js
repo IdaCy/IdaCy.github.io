@@ -421,6 +421,16 @@ function doPost(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  // Action: Mark the current draw's emails as already sent (admin), e.g.
+  // after sending them manually, so sendPendingEmails won't send again
+  if (data.action === 'markEmailsSent') {
+    const runId = getPairingsRunId(ss);
+    setConfigValue(ss, 'emailsSentFor', runId);
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, emailsSentFor: runId }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // Action: Re-send the pairing emails for the current Pairings sheet
   // (e.g. after a draw ran while RESEND_API_KEY was missing)
   if (data.action === 'resendEmails') {
@@ -633,7 +643,8 @@ function getPairingsRunId(ss) {
   const pairingsSheet = ss.getSheetByName('Pairings');
   if (!pairingsSheet) return '';
   const v = pairingsSheet.getRange(2, 1).getValue();
-  return v ? String(v) : '';
+  if (!v) return '';
+  return v instanceof Date ? v.toISOString() : String(v);
 }
 
 function sendPendingEmails() {
