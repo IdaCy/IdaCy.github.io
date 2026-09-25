@@ -849,11 +849,10 @@
             const lunchEmojis = ['🍕', '🍔', '🥗', '🍜', '🍱', '🌮', '🥪', '🍛'];
 
             const pairingsFor = lotteryRun ? formatTuesday(lunchTuesdayForDraw(lotteryRun)) : null;
-            const nextTuesday = formatTuesday(getNextTuesday());
 
             container.innerHTML = `
                 <h3 style="color: rgb(5, 72, 27); margin-bottom: 15px;">This Week's Lunch Pairs</h3>
-                <p style="color: #555; margin-bottom: 8px; font-size: 0.95rem;">${pairingsFor ? `Pairings for the ${pairingsFor}. ` : ''}Enter yourself above for ${nextTuesday}.</p>
+                <p style="color: #555; margin-bottom: 8px; font-size: 0.95rem;">${pairingsFor ? `Pairings for the ${pairingsFor}.<br>` : ''}Enter name above for the next one!</p>
                 <p style="color: #555; margin-bottom: 20px; font-size: 0.95rem;">Meet on floor 12 at 12:45 to have lunch with your partner! Arrange alternatives on Slack with them.</p>
                 ${pairings.map((pair, index) => {
                     const emoji = lunchEmojis[index % lunchEmojis.length];
