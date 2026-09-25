@@ -127,7 +127,7 @@ function sendResendEmail(toEmail, toName, partnerName, partnerSlack) {
   });
 
   const htmlContent = `
-    <p>Hi ${toName} - It's Lunch Lottery day! You're lunching with ${partnerName}. Reach out to them now: ${partnerSlack}.</p>
+    <p>Hi ${toName} - It's Lunch Lottery day! You're lunching with ${partnerName}. Meet them at 12:45 on floor 12. You can also reach out to them via slack, it's ${partnerSlack}.</p>
     <p>Enjoy,<br>Your Lunch Lottery bot</p>
   `;
 

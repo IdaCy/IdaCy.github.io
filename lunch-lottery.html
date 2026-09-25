@@ -780,7 +780,7 @@
                 }
 
                 const pairings = data.pairings;
-                renderPairings(pairings);
+                renderPairings(pairings, new Date().toISOString());
 
                 // Emails are sent by the Apps Script backend at 8am (see sendPendingEmails)
                 console.log('Lottery complete! Emails will go out at 8am.');
@@ -796,7 +796,7 @@
                 const data = await response.json();
                 console.log('Pairings API response:', data); // Debug
                 if (data.success) {
-                    renderPairings(data.pairings || []);
+                    renderPairings(data.pairings || [], data.lotteryRun);
                 } else {
                     console.error('Pairings API error:', data.error);
                     renderPairings([]);
@@ -817,8 +817,22 @@
             renderPairings([]);
         }
 
-        // Render pairings
-        function renderPairings(pairings) {
+        // First Tuesday on/after a draw date (a draw on Tuesday after lunch counts for next week)
+        function lunchTuesdayForDraw(drawDate) {
+            const d = new Date(drawDate);
+            let days = (2 - d.getDay() + 7) % 7;
+            if (days === 0 && d.getHours() >= 13) days = 7;
+            const tuesday = new Date(d);
+            tuesday.setDate(d.getDate() + days);
+            return tuesday;
+        }
+
+        function formatTuesday(date) {
+            return date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        }
+
+        // Render pairings. lotteryRun is the ISO timestamp of the draw that produced them.
+        function renderPairings(pairings, lotteryRun) {
             const container = document.getElementById('pairings-container');
 
             if (!pairings || pairings.length === 0) {
@@ -834,8 +848,12 @@
 
             const lunchEmojis = ['🍕', '🍔', '🥗', '🍜', '🍱', '🌮', '🥪', '🍛'];
 
+            const pairingsFor = lotteryRun ? formatTuesday(lunchTuesdayForDraw(lotteryRun)) : null;
+            const nextTuesday = formatTuesday(getNextTuesday());
+
             container.innerHTML = `
                 <h3 style="color: rgb(5, 72, 27); margin-bottom: 15px;">This Week's Lunch Pairs</h3>
+                <p style="color: #555; margin-bottom: 8px; font-size: 0.95rem;">${pairingsFor ? `Pairings for the ${pairingsFor}. ` : ''}Enter yourself above for ${nextTuesday}.</p>
                 <p style="color: #555; margin-bottom: 20px; font-size: 0.95rem;">Meet on floor 12 at 12:45 to have lunch with your partner! Arrange alternatives on Slack with them.</p>
                 ${pairings.map((pair, index) => {
                     const emoji = lunchEmojis[index % lunchEmojis.length];
