@@ -357,7 +357,7 @@ function doPost(e) {
   // Action: Run lottery on active sheet, then switch to other sheet
   if (data.action === 'runLottery') {
     // Guard against two browsers triggering the draw at the same moment:
-    // serialise with a lock and refuse if a draw happened in the last 10 minutes.
+    // serialise with a lock and refuse if a draw happened in the last 2 minutes.
     const lock = LockService.getScriptLock();
     if (!lock.tryLock(30000)) {
       return ContentService
@@ -384,7 +384,7 @@ function doPost(e) {
 function runLotteryLocked(ss) {
   ensureParticipantSheets(ss);
   const lastRun = getLastLotteryRun(ss);
-  if (lastRun && (Date.now() - new Date(lastRun).getTime()) < 10 * 60 * 1000) {
+  if (lastRun && (Date.now() - new Date(lastRun).getTime()) < 2 * 60 * 1000) {
     return ContentService
       .createTextOutput(JSON.stringify({ success: false, error: 'Lottery already drawn a moment ago' }))
       .setMimeType(ContentService.MimeType.JSON);
