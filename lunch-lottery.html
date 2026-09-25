@@ -639,6 +639,7 @@
                 lastSeenDeadline = deadline.getTime();
                 await maybeRunLottery();
                 await loadPairings();
+                await sendPendingEmails();
             }
         }
 
@@ -727,6 +728,22 @@
             }
         }
 
+        // Ask the backend to send this draw's emails if it's past 8am and they
+        // haven't gone out yet. A daily Apps Script trigger does the same, this
+        // is just a fallback so a page visit can also deliver them.
+        async function sendPendingEmails() {
+            try {
+                const response = await fetch(SHEETS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'sendPendingEmails' })
+                });
+                const data = await response.json();
+                if (data.sent) console.log('Pairing emails sent:', data.emailsSent);
+            } catch (error) {
+                console.error('Failed to check pending emails:', error);
+            }
+        }
+
         // Re-send this week's pairing emails without redrawing (admin - call from console: resendEmails())
         async function resendEmails() {
             try {
@@ -765,8 +782,8 @@
                 const pairings = data.pairings;
                 renderPairings(pairings);
 
-                // Emails are sent by the Google Apps Script backend via Resend
-                console.log('Lottery complete! Emails sent via backend:', data.emailsSent);
+                // Emails are sent by the Apps Script backend at 8am (see sendPendingEmails)
+                console.log('Lottery complete! Emails will go out at 8am.');
             } catch (error) {
                 console.error('Failed to run lottery:', error);
             }

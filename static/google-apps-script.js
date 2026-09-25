@@ -39,7 +39,7 @@ function getNextTuesday() {
   const now = new Date();
   const dayOfWeek = now.getDay();
   let daysUntilTuesday = (2 - dayOfWeek + 7) % 7;
-  if (daysUntilTuesday === 0) daysUntilTuesday = 7; // If today is Tuesday, get next Tuesday
+  if (daysUntilTuesday === 0 && now.getHours() >= 12) daysUntilTuesday = 7; // Tuesday afternoon -> next Tuesday
 
   const tuesday = new Date(now);
   tuesday.setDate(now.getDate() + daysUntilTuesday);
@@ -224,6 +224,29 @@ function setLastLotteryRun(ss, date) {
   }
 }
 
+// Generic Config get/set (creates the row if missing)
+function getConfigValue(ss, key) {
+  const config = ss.getSheetByName('Config');
+  if (!config) return null;
+  const data = config.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === key) return data[i][1] || null;
+  }
+  return null;
+}
+
+function setConfigValue(ss, key, value) {
+  const config = ss.getSheetByName('Config');
+  const data = config.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === key) {
+      config.getRange(i + 1, 2).setValue(value);
+      return;
+    }
+  }
+  config.appendRow([key, value]);
+}
+
 // Ensure participant sheets exist
 function ensureParticipantSheets(ss) {
   if (!ss.getSheetByName('Participants_A')) {
@@ -381,6 +404,14 @@ function doPost(e) {
     return clearAllLocked(ss);
   }
 
+  // Action: Send this draw's emails if it is past EMAIL_SEND_HOUR and they
+  // haven't gone out yet (the page calls this on load as a fallback)
+  if (data.action === 'sendPendingEmails') {
+    return ContentService
+      .createTextOutput(JSON.stringify(sendPendingEmails()))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // Action: Re-send the pairing emails for the current Pairings sheet
   // (e.g. after a draw ran while RESEND_API_KEY was missing)
   if (data.action === 'resendEmails') {
@@ -476,8 +507,9 @@ function runLotteryLocked(ss) {
     newSheet.deleteRows(2, lastRow - 1);
   }
 
-  // Send emails via Resend
-  const emailResults = sendPairingEmails(pairings);
+  // Emails are NOT sent here. They go out at EMAIL_SEND_HOUR (see
+  // sendPendingEmails), driven by the daily time trigger or the page.
+  setConfigValue(ss, 'emailsSentFor', '');
 
   return ContentService
     .createTextOutput(JSON.stringify({
@@ -485,9 +517,7 @@ function runLotteryLocked(ss) {
       pairings: pairings,
       previousSheet: activeSheetLetter,
       newActiveSheet: newActiveSheet,
-      emailsSent: emailResults.filter(r => r.success).length,
-      emailsFailed: emailResults.filter(r => !r.success).length,
-      errors: emailResults.filter(r => !r.success).map(r => r.error)
+      emailsPending: true
     }))
     .setMimeType(ContentService.MimeType.JSON);
 }
@@ -568,6 +598,7 @@ function resendPairingEmails(ss) {
       .setMimeType(ContentService.MimeType.JSON);
   }
   const emailResults = sendPairingEmails(pairings);
+  setConfigValue(ss, 'emailsSentFor', getPairingsRunId(ss));
   return ContentService
     .createTextOutput(JSON.stringify({
       success: true,
@@ -576,4 +607,58 @@ function resendPairingEmails(ss) {
       errors: emailResults.filter(r => !r.success).map(r => r.error)
     }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ==============================================
+// DELAYED EMAILS
+// The draw runs at the deadline, but emails wait until EMAIL_SEND_HOUR
+// (script timezone, see Project settings) so nobody gets mail at midnight.
+// sendPendingEmails() is run by a daily time-driven trigger (Triggers >
+// Add trigger > sendPendingEmails, Day timer, 8am-9am) and also by the
+// page as a fallback. It is safe to call repeatedly.
+// ==============================================
+const EMAIL_SEND_HOUR = 8;
+
+// The timestamp written to Pairings!A2 when the draw ran
+function getPairingsRunId(ss) {
+  const pairingsSheet = ss.getSheetByName('Pairings');
+  if (!pairingsSheet) return '';
+  const v = pairingsSheet.getRange(2, 1).getValue();
+  return v ? String(v) : '';
+}
+
+function sendPendingEmails() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return { success: false, error: 'Busy, try again' };
+  try {
+    const runId = getPairingsRunId(ss);
+    if (!runId) return { success: true, sent: false, reason: 'No pairings' };
+    if (getConfigValue(ss, 'emailsSentFor') === runId) {
+      return { success: true, sent: false, reason: 'Already sent for this draw' };
+    }
+    const now = new Date();
+    if (now.getHours() < EMAIL_SEND_HOUR) {
+      return { success: true, sent: false, reason: 'Before ' + EMAIL_SEND_HOUR + ':00, waiting' };
+    }
+    if (!RESEND_API_KEY) return { success: false, error: 'RESEND_API_KEY script property is not set' };
+
+    const pairings = readPairings(ss);
+    if (pairings.length === 0) return { success: true, sent: false, reason: 'No pairings' };
+
+    const emailResults = sendPairingEmails(pairings);
+    const failed = emailResults.filter(r => !r.success);
+    if (failed.length === 0) {
+      setConfigValue(ss, 'emailsSentFor', runId);
+    }
+    return {
+      success: true,
+      sent: true,
+      emailsSent: emailResults.length - failed.length,
+      emailsFailed: failed.length,
+      errors: failed.map(r => r.error)
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
