@@ -442,13 +442,19 @@ function doPost(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// HTTP wrapper: caller must already hold the script lock
 function runLotteryLocked(ss) {
+  return ContentService
+    .createTextOutput(JSON.stringify(runLotteryCore(ss)))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// The draw itself. Returns a plain result object. No locking here.
+function runLotteryCore(ss) {
   ensureParticipantSheets(ss);
   const lastRun = getLastLotteryRun(ss);
   if (lastRun && (Date.now() - new Date(lastRun).getTime()) < 2 * 60 * 1000) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ success: false, error: 'Lottery already drawn a moment ago' }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return { success: false, error: 'Lottery already drawn a moment ago' };
   }
   const activeSheetLetter = getActiveSheet(ss);
   const participantsSheet = ss.getSheetByName('Participants_' + activeSheetLetter);
@@ -467,9 +473,7 @@ function runLotteryLocked(ss) {
   }
 
   if (participants.length < 2) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ success: false, error: 'Need at least 2 participants' }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return { success: false, error: 'Need at least 2 participants' };
   }
 
   // Shuffle participants
@@ -530,15 +534,13 @@ function runLotteryLocked(ss) {
   // sendPendingEmails), driven by the daily time trigger or the page.
   setConfigValue(ss, 'emailsSentFor', '');
 
-  return ContentService
-    .createTextOutput(JSON.stringify({
-      success: true,
-      pairings: pairings,
-      previousSheet: activeSheetLetter,
-      newActiveSheet: newActiveSheet,
-      emailsPending: true
-    }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return {
+    success: true,
+    pairings: pairings,
+    previousSheet: activeSheetLetter,
+    newActiveSheet: newActiveSheet,
+    emailsPending: true
+  };
 }
 
 function clearAllLocked(ss) {
@@ -634,9 +636,36 @@ function resendPairingEmails(ss) {
 // (script timezone, see Project settings) so nobody gets mail at midnight.
 // sendPendingEmails() is run by a daily time-driven trigger (Triggers >
 // Add trigger > sendPendingEmails, Day timer, 8am-9am) and also by the
-// page as a fallback. It is safe to call repeatedly.
+// page as a fallback. It first runs the draw if Monday's deadline passed
+// without one (drawIfOverdue), then sends. It is safe to call repeatedly.
 // ==============================================
 const EMAIL_SEND_HOUR = 8;
+
+// Weekly signup deadline: Monday 23:59 in the script timezone.
+// Returns the most recent deadline that is <= now.
+function getMostRecentDeadline(now) {
+  const d = new Date(now);
+  d.setHours(23, 59, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // back to Monday
+  if (d > now) d.setDate(d.getDate() - 7);
+  return d;
+}
+
+// Run the draw if a deadline has passed and no draw has happened since.
+// Normally the first page visitor after Monday 23:59 triggers the draw; this
+// is the server-side safety net so it happens even if nobody opens the page.
+// Caller must hold the script lock.
+function drawIfOverdue(ss) {
+  const now = new Date();
+  const deadline = getMostRecentDeadline(now);
+  const lastRun = getLastLotteryRun(ss);
+  if (lastRun && new Date(lastRun) >= deadline) {
+    return { drew: false, reason: 'Already drawn since ' + deadline.toISOString() };
+  }
+  const result = runLotteryCore(ss);
+  Logger.log('Scheduled draw: ' + JSON.stringify(result));
+  return { drew: !!result.success, result: result };
+}
 
 // The timestamp written to Pairings!A2 when the draw ran
 function getPairingsRunId(ss) {
@@ -652,10 +681,12 @@ function sendPendingEmails() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { success: false, error: 'Busy, try again' };
   try {
+    const draw = drawIfOverdue(ss);
+
     const runId = getPairingsRunId(ss);
-    if (!runId) return { success: true, sent: false, reason: 'No pairings' };
+    if (!runId) return { success: true, sent: false, reason: 'No pairings', draw: draw };
     if (getConfigValue(ss, 'emailsSentFor') === runId) {
-      return { success: true, sent: false, reason: 'Already sent for this draw' };
+      return { success: true, sent: false, reason: 'Already sent for this draw', draw: draw };
     }
     const now = new Date();
     if (now.getHours() < EMAIL_SEND_HOUR) {
@@ -674,6 +705,7 @@ function sendPendingEmails() {
     return {
       success: true,
       sent: true,
+      draw: draw,
       emailsSent: emailResults.length - failed.length,
       emailsFailed: failed.length,
       errors: failed.map(r => r.error)
