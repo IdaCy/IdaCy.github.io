@@ -151,7 +151,12 @@ function sendResendEmail(toEmail, toName, partnerName, partnerSlack) {
 
   try {
     const response = UrlFetchApp.fetch('https://api.resend.com/emails', options);
+    const code = response.getResponseCode();
     const result = JSON.parse(response.getContentText());
+    if (code < 200 || code >= 300) {
+      Logger.log('Resend rejected email to ' + toEmail + ' (' + code + '): ' + JSON.stringify(result));
+      return { success: false, error: 'Resend ' + code + ': ' + (result.message || JSON.stringify(result)) };
+    }
     Logger.log('Email sent to ' + toEmail + ': ' + JSON.stringify(result));
     return { success: true, result: result };
   } catch (error) {
@@ -376,6 +381,12 @@ function doPost(e) {
     return clearAllLocked(ss);
   }
 
+  // Action: Re-send the pairing emails for the current Pairings sheet
+  // (e.g. after a draw ran while RESEND_API_KEY was missing)
+  if (data.action === 'resendEmails') {
+    return resendPairingEmails(ss);
+  }
+
   return ContentService
     .createTextOutput(JSON.stringify({ success: false, error: 'Unknown action' }))
     .setMimeType(ContentService.MimeType.JSON);
@@ -466,18 +477,7 @@ function runLotteryLocked(ss) {
   }
 
   // Send emails via Resend
-  const emailResults = [];
-  for (let i = 0; i < pairings.length; i++) {
-    const pair = pairings[i];
-    if (pair.length === 2) {
-      emailResults.push(sendResendEmail(pair[0].email, pair[0].name, pair[1].name, pair[1].slack));
-      emailResults.push(sendResendEmail(pair[1].email, pair[1].name, pair[0].name, pair[0].slack));
-    } else if (pair.length === 3) {
-      emailResults.push(sendResendEmail(pair[0].email, pair[0].name, pair[1].name + ' and ' + pair[2].name, pair[1].slack + ' & ' + pair[2].slack));
-      emailResults.push(sendResendEmail(pair[1].email, pair[1].name, pair[0].name + ' and ' + pair[2].name, pair[0].slack + ' & ' + pair[2].slack));
-      emailResults.push(sendResendEmail(pair[2].email, pair[2].name, pair[0].name + ' and ' + pair[1].name, pair[0].slack + ' & ' + pair[1].slack));
-    }
-  }
+  const emailResults = sendPairingEmails(pairings);
 
   return ContentService
     .createTextOutput(JSON.stringify({
@@ -485,7 +485,9 @@ function runLotteryLocked(ss) {
       pairings: pairings,
       previousSheet: activeSheetLetter,
       newActiveSheet: newActiveSheet,
-      emailsSent: emailResults.length
+      emailsSent: emailResults.filter(r => r.success).length,
+      emailsFailed: emailResults.filter(r => !r.success).length,
+      errors: emailResults.filter(r => !r.success).map(r => r.error)
     }))
     .setMimeType(ContentService.MimeType.JSON);
 }
@@ -516,5 +518,62 @@ function clearAllLocked(ss) {
 
   return ContentService
     .createTextOutput(JSON.stringify({ success: true, message: 'All cleared, reset to Sheet A' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// Send one email per person for each pair/trio. Returns one result per email.
+function sendPairingEmails(pairings) {
+  const emailResults = [];
+  for (let i = 0; i < pairings.length; i++) {
+    const pair = pairings[i];
+    if (pair.length === 2) {
+      emailResults.push(sendResendEmail(pair[0].email, pair[0].name, pair[1].name, pair[1].slack));
+      emailResults.push(sendResendEmail(pair[1].email, pair[1].name, pair[0].name, pair[0].slack));
+    } else if (pair.length === 3) {
+      emailResults.push(sendResendEmail(pair[0].email, pair[0].name, pair[1].name + ' and ' + pair[2].name, pair[1].slack + ' & ' + pair[2].slack));
+      emailResults.push(sendResendEmail(pair[1].email, pair[1].name, pair[0].name + ' and ' + pair[2].name, pair[0].slack + ' & ' + pair[2].slack));
+      emailResults.push(sendResendEmail(pair[2].email, pair[2].name, pair[0].name + ' and ' + pair[1].name, pair[0].slack + ' & ' + pair[1].slack));
+    }
+  }
+  return emailResults;
+}
+
+// Read the current Pairings sheet back into [[person, person], ...]
+function readPairings(ss) {
+  const pairingsSheet = ss.getSheetByName('Pairings');
+  if (!pairingsSheet) return [];
+  const data = pairingsSheet.getDataRange().getValues();
+  const groups = {};
+  const order = [];
+  for (let i = 2; i < data.length; i++) {
+    if (!data[i][0]) continue;
+    const g = data[i][3];
+    if (!groups[g]) { groups[g] = []; order.push(g); }
+    groups[g].push({ name: data[i][0], email: data[i][1], slack: data[i][2] });
+  }
+  return order.map(g => groups[g]);
+}
+
+// Re-send emails for the pairings currently on the sheet (no redraw)
+function resendPairingEmails(ss) {
+  if (!RESEND_API_KEY) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: 'RESEND_API_KEY script property is not set' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  const pairings = readPairings(ss);
+  if (pairings.length === 0) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: 'No pairings to email' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  const emailResults = sendPairingEmails(pairings);
+  return ContentService
+    .createTextOutput(JSON.stringify({
+      success: true,
+      emailsSent: emailResults.filter(r => r.success).length,
+      emailsFailed: emailResults.filter(r => !r.success).length,
+      errors: emailResults.filter(r => !r.success).map(r => r.error)
+    }))
     .setMimeType(ContentService.MimeType.JSON);
 }

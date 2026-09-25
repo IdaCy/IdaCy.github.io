@@ -727,6 +727,23 @@
             }
         }
 
+        // Re-send this week's pairing emails without redrawing (admin - call from console: resendEmails())
+        async function resendEmails() {
+            try {
+                const response = await fetch(SHEETS_API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'resendEmails' })
+                });
+                const data = await response.json();
+                console.log('Resend result:', data);
+                alert(data.success
+                    ? `Sent ${data.emailsSent} email(s), ${data.emailsFailed} failed.`
+                    : 'Resend failed: ' + data.error);
+            } catch (error) {
+                console.error('Failed to resend emails:', error);
+            }
+        }
+
         // Run the lottery via Google Sheets
         // With rotating two-sheet system: runs lottery on current active sheet,
         // saves pairings, then automatically switches to other sheet for new signups
