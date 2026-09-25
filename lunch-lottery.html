@@ -492,85 +492,6 @@
         const SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbzUKblAzX8rwWEC0DLMGhh4ygApFtQ3Y7pBa75PcxQHkKXYxjvGoxkPxTduGF5-kvA6/exec';
 
 
-        // Check if lottery should auto-run (deadline passed and not yet run this cycle)
-        // Uses the rotating two-sheet system - no manual resets needed
-        async function shouldAutoRunLottery() {
-            const now = new Date();
-            const participants = await getParticipants();
-
-            // Need at least 2 participants
-            if (participants.length < 2) return false;
-
-            // Check if we're past the deadline
-            const deadline = getNextDeadline();
-            if (now < deadline) return false;
-
-            // Check status from Google Sheets (rotating system)
-            try {
-                const response = await fetch(SHEETS_API_URL + '?action=getStatus');
-                const data = await response.json();
-                if (data.success && data.lastLotteryRun) {
-                    const lastRunDate = new Date(data.lastLotteryRun);
-                    // If lottery was run after current deadline, skip
-                    // (meaning it was already run for this cycle)
-                    const currentCycleStart = new Date(deadline);
-                    currentCycleStart.setDate(currentCycleStart.getDate() - 7); // One week ago
-                    if (lastRunDate > currentCycleStart) return false;
-                }
-            } catch (error) {
-                console.error('Failed to check lottery status:', error);
-            }
-
-            return true;
-        }
-
-        /* PRODUCTION MODE - uncomment when done testing:
-        async function shouldAutoRunLottery() {
-            const now = new Date();
-            const participants = await getParticipants();
-
-            if (participants.length < 2) return false;
-
-            const dayOfWeek = now.getDay();
-            const hour = now.getHours();
-            const minute = now.getMinutes();
-
-            // Check if past Monday 23:59
-            const isPastDeadline = (dayOfWeek === 1 && (hour > 23 || (hour === 23 && minute >= 59))) ||
-                                   (dayOfWeek >= 2 && dayOfWeek <= 6) ||
-                                   (dayOfWeek === 0);
-
-            if (!isPastDeadline) return false;
-
-            // Check status from rotating system
-            try {
-                const response = await fetch(SHEETS_API_URL + '?action=getStatus');
-                const data = await response.json();
-                if (data.success && data.lastLotteryRun) {
-                    const lastRunDate = new Date(data.lastLotteryRun);
-                    const lastMonday = getLastMonday();
-                    if (lastRunDate > lastMonday) return false;
-                }
-            } catch (error) {
-                console.error('Failed to check lottery status:', error);
-            }
-
-            return true;
-        }
-
-        function getLastMonday() {
-            const now = new Date();
-            const dayOfWeek = now.getDay();
-            const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-
-            const lastMonday = new Date(now);
-            lastMonday.setDate(now.getDate() - daysSinceMonday);
-            lastMonday.setHours(23, 59, 0, 0);
-
-            return lastMonday;
-        }
-        */
-
         // Initialize - no manual resets needed with rotating two-sheet system
         document.addEventListener('DOMContentLoaded', async function() {
             updateNextTuesday();
@@ -578,18 +499,19 @@
             // Load pairings first (always shows current pairings from Google Sheets)
             await loadPairings();
 
-            // Initial countdown update (may trigger lottery if deadline passed)
+            // Initial countdown update (runs the draw if a deadline has passed and not been drawn)
             await updateCountdown();
 
             // Update countdown every second
             setInterval(updateCountdown, 1000);
         });
 
-        // Get next Tuesday after the deadline
+        // Get the lunch Tuesday: first Tuesday on/after the next deadline
         function getNextTuesday() {
             const deadline = getNextDeadline();
             const tuesday = new Date(deadline);
-            tuesday.setDate(deadline.getDate() + 1); // Day after Monday deadline
+            const daysUntilTuesday = (2 - deadline.getDay() + 7) % 7 || 7;
+            tuesday.setDate(deadline.getDate() + daysUntilTuesday);
             return tuesday;
         }
 
@@ -605,68 +527,90 @@
             document.getElementById('lunch-tuesday').textContent = formatted;
         }
 
-        // PRODUCTION: Deadline is Monday 23:59 (Tuesday midnight)
-        let lotteryTriggered = false;
+        // ==============================================
+        // DRAW SCHEDULE
+        // FIRST_DRAW is the first deadline (explicit SF timezone). Any deadline
+        // before it is ignored. After it, draws happen every Monday at 23:59.
+        // ==============================================
+        const FIRST_DRAW = new Date('2026-09-25T07:45:00-07:00'); // 25 Sep 2026 07:45 San Francisco (PDT)
+
+        // Most recent Monday 23:59 that is <= now
+        function getMostRecentMonday(now) {
+            const d = new Date(now);
+            d.setHours(23, 59, 0, 0);
+            d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // back to Monday
+            if (d > now) d.setDate(d.getDate() - 7);
+            return d;
+        }
+
+        // Returns { last, next }: last = most recent deadline that has passed
+        // (null if none yet), next = upcoming deadline (always in the future)
+        function getDeadlines() {
+            const now = new Date();
+            if (now < FIRST_DRAW) {
+                return { last: null, next: FIRST_DRAW };
+            }
+            let last = getMostRecentMonday(now);
+            if (last < FIRST_DRAW) last = FIRST_DRAW;
+            const next = getMostRecentMonday(now);
+            next.setDate(next.getDate() + 7);
+            return { last: last, next: next };
+        }
 
         function getNextDeadline() {
-            const now = new Date();
-
-            // First deadline is March 2nd, 2026 at 23:59 (Monday before first Tuesday lunch)
-            const firstDeadline = new Date(2026, 2, 2, 23, 59, 0, 0); // Month is 0-indexed, so 2 = March
-
-            if (now < firstDeadline) {
-                return firstDeadline;
-            }
-
-            // After first deadline, calculate next Monday 23:59
-            const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, 2=Tue, etc.
-
-            let daysUntilMonday;
-            if (dayOfWeek === 1) {
-                // It's Monday - if before 23:59, deadline is today; otherwise next Monday
-                daysUntilMonday = (now.getHours() >= 23 && now.getMinutes() >= 59) ? 7 : 0;
-            } else if (dayOfWeek === 0) {
-                daysUntilMonday = 1; // Sunday -> tomorrow
-            } else {
-                daysUntilMonday = 8 - dayOfWeek; // Tue-Sat -> next Monday
-            }
-
-            const deadline = new Date(now);
-            deadline.setDate(now.getDate() + daysUntilMonday);
-            deadline.setHours(23, 59, 0, 0);
-
-            return deadline;
+            return getDeadlines().next;
         }
 
-        // Advance deadline to next week (called after lottery runs)
-        function advanceDeadline() {
-            // Next deadline is 7 days from current deadline
-            // lotteryTriggered stays true - resets on page reload
-        }
+        // Run the lottery if the last passed deadline has not been drawn yet.
+        // The backend's lastLotteryRun timestamp is the source of truth, so
+        // the first visitor after a deadline triggers the draw.
+        let lotteryCheckInFlight = false;
+        let drawnForDeadline = 0;
 
-        // Check if signup is open
-        function isSignupOpen() {
-            const now = new Date();
-            const dayOfWeek = now.getDay();
+        async function maybeRunLottery() {
+            const { last } = getDeadlines();
+            if (!last || lotteryCheckInFlight || drawnForDeadline === last.getTime()) return;
+            lotteryCheckInFlight = true;
+            try {
+                const response = await fetch(SHEETS_API_URL + '?action=getStatus');
+                const status = await response.json();
+                if (!status.success) return;
 
-            if (dayOfWeek === 1 && now.getHours() >= 23 && now.getMinutes() >= 59) {
-                return false;
+                const lastRun = status.lastLotteryRun ? new Date(status.lastLotteryRun) : null;
+                if (lastRun && lastRun >= last) {
+                    drawnForDeadline = last.getTime(); // already drawn this cycle
+                    return;
+                }
+
+                const participants = await getParticipants();
+                if (participants.length < 2) {
+                    console.log('Deadline passed but fewer than 2 participants - no draw');
+                    return;
+                }
+
+                document.getElementById('countdown').textContent = 'Running lottery...';
+                await runLottery();
+                drawnForDeadline = last.getTime();
+            } catch (error) {
+                console.error('Failed to check/run lottery:', error);
+            } finally {
+                lotteryCheckInFlight = false;
             }
-            return true;
         }
 
-        // Update countdown display
-        // With rotating system, signups are ALWAYS open - you're signing up for the NEXT lottery
+        // Update countdown display. Signups are always open with the rotating
+        // system - you're signing up for the NEXT draw.
+        let lastSeenDeadline = 0;
+
         async function updateCountdown() {
             const deadline = getNextDeadline();
             const now = new Date();
-            const diff = deadline - now;
+            const diff = Math.max(0, deadline - now);
 
             const countdownEl = document.getElementById('countdown');
             const statusBadge = document.getElementById('status-badge');
             const deadlineText = document.getElementById('deadline-text');
 
-            // Update deadline text with dynamic day and time (show local timezone)
             const deadlineDay = deadline.toLocaleDateString('en-US', { weekday: 'long' });
             const deadlineTime = deadline.toLocaleTimeString('en-US', {
                 hour: '2-digit',
@@ -676,42 +620,26 @@
             });
             deadlineText.textContent = `${deadlineDay} at ${deadlineTime}`;
 
-            // Signups are always open with rotating system
             statusBadge.textContent = 'Sign-up Open';
             statusBadge.className = 'status-badge status-open';
 
-            if (diff > 0) {
+            if (!lotteryCheckInFlight) {
                 const days = Math.floor(diff / (1000 * 60 * 60 * 24));
                 const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                 const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((diff % (1000 * 60)) / 1000);
                 countdownEl.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
-            } else {
-                // Deadline passed - trigger lottery if not already triggered
-                if (!lotteryTriggered) {
-                    lotteryTriggered = true;
-                    countdownEl.textContent = 'Running lottery...';
-
-                    // Check if we can run lottery
-                    const participants = await getParticipants();
-                    if (participants.length >= 2) {
-                        await runLottery();
-                        // runLottery already renders pairings, don't reload
-                    }
-                }
-
-                // After lottery, calculate next week's deadline and show countdown
-                const nextDeadline = new Date(deadline.getTime() + 7 * 24 * 60 * 60 * 1000);
-                const nextDiff = nextDeadline - now;
-                const days = Math.floor(nextDiff / (1000 * 60 * 60 * 24));
-                const hours = Math.floor((nextDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const minutes = Math.floor((nextDiff % (1000 * 60 * 60)) / (1000 * 60));
-                const seconds = Math.floor((nextDiff % (1000 * 60)) / 1000);
-                countdownEl.textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
             }
 
-            // Update Tuesday date display
             updateNextTuesday();
+
+            // On first tick, and whenever the upcoming deadline rolls over
+            // (i.e. a deadline just passed), check whether a draw is due.
+            if (deadline.getTime() !== lastSeenDeadline) {
+                lastSeenDeadline = deadline.getTime();
+                await maybeRunLottery();
+                await loadPairings();
+            }
         }
 
         // Get participants from Google Sheets
