@@ -34,23 +34,32 @@ const LUNCH_JOKES = [
   "This match is a big dill!"
 ];
 
-// Get next Tuesday at 12:00
+// Lunch slot (script timezone): Tuesday 12:45-13:45
+const LUNCH_START_HOUR = 12;
+const LUNCH_START_MINUTE = 45;
+const LUNCH_DURATION_MS = 60 * 60 * 1000;
+
+// Get next Tuesday at lunch time
 function getNextTuesday() {
   const now = new Date();
   const dayOfWeek = now.getDay();
   let daysUntilTuesday = (2 - dayOfWeek + 7) % 7;
-  if (daysUntilTuesday === 0 && now.getHours() >= 12) daysUntilTuesday = 7; // Tuesday afternoon -> next Tuesday
+  // Tuesday after lunch has started -> next Tuesday
+  if (daysUntilTuesday === 0 && (now.getHours() > LUNCH_START_HOUR ||
+      (now.getHours() === LUNCH_START_HOUR && now.getMinutes() >= LUNCH_START_MINUTE))) {
+    daysUntilTuesday = 7;
+  }
 
   const tuesday = new Date(now);
   tuesday.setDate(now.getDate() + daysUntilTuesday);
-  tuesday.setHours(12, 0, 0, 0);
+  tuesday.setHours(LUNCH_START_HOUR, LUNCH_START_MINUTE, 0, 0);
   return tuesday;
 }
 
 // Generate .ics calendar invite content (PST timezone)
 function generateCalendarInvite(toName, partnerName, lunchDate) {
   const startDate = lunchDate;
-  const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // 1 hour later
+  const endDate = new Date(startDate.getTime() + LUNCH_DURATION_MS);
 
   // Format dates for ICS (YYYYMMDDTHHmmss)
   function formatICSDate(date) {
